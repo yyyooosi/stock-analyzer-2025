@@ -142,7 +142,7 @@ export const BacktestResults: React.FC<BacktestResultsProps> = ({
         borderColor: 'rgb(75, 85, 99)',
         borderWidth: 1,
         callbacks: {
-          label: function(context: any) {
+          label: function(context: { dataset: { label?: string }; parsed: { y: number } }) {
             const label = context.dataset.label || '';
             const value = context.parsed.y;
             return `${label}: ${formatCurrency(value)}`;
@@ -174,7 +174,7 @@ export const BacktestResults: React.FC<BacktestResultsProps> = ({
         },
         ticks: {
           color: 'rgb(156, 163, 175)',
-          callback: function(value: any) {
+          callback: function(value: string | number) {
             return formatCurrency(Number(value));
           }
         },

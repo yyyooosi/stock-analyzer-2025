@@ -30,9 +30,9 @@ interface ChartData {
 export default function Home() {
   const [stockData, setStockData] = useState<StockData | null>(null);
   const [chartData, setChartData] = useState<ChartData[]>([]);
-  const [technicalIndicators, setTechnicalIndicators] = useState<any>(null);
+  const [technicalIndicators, setTechnicalIndicators] = useState<ReturnType<typeof getLatestIndicators> | null>(null);
   const [signalAnalysis, setSignalAnalysis] = useState<SignalAnalysis | null>(null);
-  const [backtestResult, setBacktestResult] = useState<any>(null);
+  const [backtestResult, setBacktestResult] = useState<ReturnType<typeof runBacktest> | null>(null);
   const [isBacktesting, setIsBacktesting] = useState(false);
   const [symbol, setSymbol] = useState('AAPL');
   const [loading, setLoading] = useState(false);

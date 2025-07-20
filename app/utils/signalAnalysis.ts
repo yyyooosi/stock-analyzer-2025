@@ -57,7 +57,7 @@ function calculateMACDScore(macd: number | null, signal: number | null, histogra
   }
   
   let score = 0;
-  let reasons: string[] = [];
+  const reasons: string[] = [];
   
   // MACD線とシグナル線の関係
   if (macd > signal) {
@@ -95,7 +95,7 @@ function calculateMovingAverageScore(
   }
   
   let score = 0;
-  let reasons: string[] = [];
+  const reasons: string[] = [];
   
   // 短期移動平均の関係
   if (sma5 > sma20) {
