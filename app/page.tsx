@@ -1,402 +1,327 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { StockChart } from './components/StockChart';
-import { TechnicalIndicators } from './components/TechnicalIndicators';
-import { BuySignal } from './components/BuySignal';
-import { BacktestResults } from './components/BacktestResults';
-import { calculateAllIndicators, getLatestIndicators } from './utils/technicalIndicators';
-import { analyzeSignals, SignalAnalysis } from './utils/signalAnalysis';
-import { runBacktest } from './utils/backtest';
-import { fetchStockData, StockAPIError } from './utils/stockAPI';
+import { useEffect, useRef } from 'react';
+import { Chart as ChartJS, CategoryScale, LinearScale, LineElement, PointElement, Title, Tooltip, Legend } from 'chart.js';
 
-interface StockData {
-  symbol: string;
-  price: number;
-  change: number;
-  changePercent: number;
-  timestamp: string;
+// Chart.jsの登録
+ChartJS.register(CategoryScale, LinearScale, LineElement, PointElement, Title, Tooltip, Legend);
+
+interface BacktestResultsProps {
+  result: {
+    strategy: string;
+    initialCapital: number;
+    finalValue: number;
+    totalReturn: number;
+    totalReturnPercent: number;
+    trades: Array<{
+      date: string;
+      action: 'buy' | 'sell';
+      price: number;
+      shares: number;
+      totalCost: number;
+      portfolioValue: number;
+    }>;
+    maxDrawdown: number;
+    volatility: number;
+    sharpeRatio: number;
+    winRate: number;
+    totalTrades: number;
+    winningTrades: number;
+    losingTrades: number;
+    portfolioHistory: Array<{
+      date: string;
+      value: number;
+    }>;
+  };
 }
 
-interface ChartData {
-  date: string;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume: number;
-}
-
-export default function Home() {
-  const [stockData, setStockData] = useState<StockData | null>(null);
-  const [chartData, setChartData] = useState<ChartData[]>([]);
-  const [technicalIndicators, setTechnicalIndicators] = useState<ReturnType<typeof getLatestIndicators> | null>(null);
-  const [signalAnalysis, setSignalAnalysis] = useState<SignalAnalysis | null>(null);
-  const [backtestResult, setBacktestResult] = useState<ReturnType<typeof runBacktest> | null>(null);
-  const [isBacktesting, setIsBacktesting] = useState(false);
-  const [symbol, setSymbol] = useState('AAPL');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [useRealData, setUseRealData] = useState(true);
-  const [dataSource, setDataSource] = useState<'real' | 'demo'>('demo');
-
-  const fetchStockDataHandler = async (inputSymbol: string) => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      console.log(`データ取得開始: ${inputSymbol}, 実データモード: ${useRealData}`);
-      
-      // 実データまたはサンプルデータを取得
-      const { stock, chart } = await fetchStockData(inputSymbol, useRealData);
-      
-      // データソースを記録
-      setDataSource(useRealData && process.env.NEXT_PUBLIC_ALPHA_VANTAGE_API_KEY ? 'real' : 'demo');
-      
-      setStockData(stock);
-      setChartData(chart);
-      
-      // テクニカル指標を計算
-      const indicators = calculateAllIndicators(chart);
-      const latestIndicators = getLatestIndicators(indicators);
-      setTechnicalIndicators(latestIndicators);
-      
-      // 買い時シグナルを分析
-      const analysis = analyzeSignals(latestIndicators, stock.price);
-      setSignalAnalysis(analysis);
-      
-      // デバッグ用ログ
-      console.log('データ取得完了:', {
-        symbol: stock.symbol,
-        price: stock.price,
-        chartDays: chart.length,
-        dataSource: dataSource
-      });
-      
-      // バックテスト結果をクリア
-      setBacktestResult(null);
-      
-    } catch (err) {
-      if (err instanceof StockAPIError) {
-        setError(err.message);
-      } else {
-        setError('データの取得に失敗しました');
-      }
-      console.error('データ取得エラー:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const runBacktestAnalysis = async () => {
-    if (!chartData.length) return;
-    
-    console.log('Starting backtest with data:', chartData.length, 'days');
-    setIsBacktesting(true);
-    
-    try {
-      // バックテストを実行
-      const result = runBacktest(chartData, {
-        initialCapital: 10000,
-        commissionRate: 0.001,
-        riskPerTrade: 0.1, // 10%に増加
-        stopLossPercent: 0.08, // 8%に調整
-        takeProfitPercent: 0.12 // 12%に調整
-      });
-      
-      console.log('Backtest completed:', result); // デバッグ用
-      console.log('Number of trades:', result.trades.length);
-      console.log('Performance:', result.performance);
-      setBacktestResult(result);
-    } catch (err) {
-      setError('バックテストの実行に失敗しました');
-      console.error('Error running backtest:', err);
-    } finally {
-      setIsBacktesting(false);
-    }
-  };
+export default function BacktestResults({ result }: BacktestResultsProps) {
+  const chartRef = useRef<HTMLCanvasElement>(null);
+  const chartInstance = useRef<ChartJS | null>(null);
 
   useEffect(() => {
-    fetchStockDataHandler(symbol);
-  }, []);
+    if (!chartRef.current) return;
 
-  const handleSymbolChange = (e: React.FormEvent) => {
-    e.preventDefault();
-    fetchStockDataHandler(symbol);
-  };
+    const ctx = chartRef.current.getContext('2d');
+    if (!ctx) return;
 
-  const toggleDataMode = () => {
-    const newMode = !useRealData;
-    setUseRealData(newMode);
-    // モード変更時に再度データを取得
-    fetchStockDataHandler(symbol);
-  };
+    // 既存のチャートを破棄
+    if (chartInstance.current) {
+      chartInstance.current.destroy();
+    }
 
-  const formatPrice = (price: number) => {
+    // 新しいチャートを作成
+    chartInstance.current = new ChartJS(ctx, {
+      type: 'line',
+      data: {
+        labels: result.portfolioHistory.map(h => h.date),
+        datasets: [
+          {
+            label: 'ポートフォリオ価値',
+            data: result.portfolioHistory.map(h => h.value),
+            borderColor: 'rgb(59, 130, 246)',
+            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+            tension: 0.1,
+            fill: true
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          title: {
+            display: true,
+            text: 'ポートフォリオ価値の推移',
+            color: 'rgb(243, 244, 246)'
+          },
+          legend: {
+            labels: {
+              color: 'rgb(156, 163, 175)'
+            }
+          },
+          tooltip: {
+            backgroundColor: 'rgba(17, 24, 39, 0.9)',
+            titleColor: 'rgb(243, 244, 246)',
+            bodyColor: 'rgb(156, 163, 175)',
+            borderColor: 'rgb(75, 85, 99)',
+            borderWidth: 1,
+            callbacks: {
+              label: function(context: { dataset: { label?: string }; parsed: { y: number } }) {
+                const label = context.dataset.label || '';
+                const value = context.parsed.y;
+                return `${label}: ${formatCurrency(value)}`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            grid: {
+              color: 'rgba(75, 85, 99, 0.3)'
+            },
+            ticks: {
+              color: 'rgb(156, 163, 175)'
+            }
+          },
+          y: {
+            grid: {
+              color: 'rgba(75, 85, 99, 0.3)'
+            },
+            ticks: {
+              color: 'rgb(156, 163, 175)',
+              callback: function(value: string | number) {
+                return formatCurrency(Number(value));
+              }
+            },
+            beginAtZero: false
+          }
+        }
+      }
+    });
+
+    // クリーンアップ関数
+    return () => {
+      if (chartInstance.current) {
+        chartInstance.current.destroy();
+        chartInstance.current = null;
+      }
+    };
+  }, [result]);
+
+  const formatCurrency = (value: number): string => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
-    }).format(price);
+    }).format(value);
   };
 
-  const formatPercent = (percent: number) => {
-    return `${percent >= 0 ? '+' : ''}${percent.toFixed(2)}%`;
+  const formatPercent = (value: number): string => {
+    return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
+  };
+
+  const getPerformanceColor = (value: number): string => {
+    if (value > 0) return 'text-green-400';
+    if (value < 0) return 'text-red-400';
+    return 'text-gray-400';
+  };
+
+  const getPerformanceLabel = (returnPercent: number): string => {
+    if (returnPercent > 20) return '優秀';
+    if (returnPercent > 10) return '良好';
+    if (returnPercent > 0) return 'プラス';
+    if (returnPercent > -10) return 'マイナス';
+    return '要改善';
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-8">
-      <div className="max-w-6xl mx-auto">
-        {/* ヘッダー */}
-        <div className="mb-8">
-          <div className="flex justify-between items-start">
-            <div>
-              <h1 className="text-4xl font-bold mb-4">米国株分析ツール</h1>
-              <p className="text-gray-400">経験豊富な投資家向けの高度な株価分析システム</p>
-            </div>
-            
-            {/* データソース切り替え */}
-            <div className="flex flex-col items-end space-y-2">
-              <div className="flex items-center space-x-3">
-                <span className="text-sm text-gray-400">データソース:</span>
-                <button
-                  onClick={toggleDataMode}
-                  className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
-                    useRealData 
-                      ? 'bg-green-600 hover:bg-green-700 text-white' 
-                      : 'bg-yellow-600 hover:bg-yellow-700 text-white'
-                  }`}
-                >
-                  {useRealData ? '🌐 実データ' : '🎭 デモ'}
-                </button>
-              </div>
-              
-              {/* データソース状態表示 */}
-              <div className="flex items-center space-x-2 text-xs">
-                <div className={`w-2 h-2 rounded-full ${
-                  dataSource === 'real' ? 'bg-green-400' : 'bg-yellow-400'
-                }`}></div>
-                <span className="text-gray-500">
-                  {dataSource === 'real' ? 'Alpha Vantage API' : 'サンプルデータ'}
-                </span>
-              </div>
-              
-              {/* APIキー状態 */}
-              {useRealData && !process.env.NEXT_PUBLIC_ALPHA_VANTAGE_API_KEY && (
-                <div className="text-xs text-orange-400">
-                  ⚠️ APIキー未設定
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* 検索フォーム */}
-        <div className="mb-8">
-          <form onSubmit={handleSymbolChange} className="flex gap-4">
-            <div className="flex-1 max-w-md">
-              <input
-                type="text"
-                value={symbol}
-                onChange={(e) => setSymbol(e.target.value.toUpperCase())}
-                placeholder="株式シンボル (例: AAPL, MSFT, GOOGL)"
-                className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 rounded-lg transition-colors"
-            >
-              {loading ? '読み込み中...' : '検索'}
-            </button>
-          </form>
-        </div>
-
-        {/* エラー表示 */}
-        {error && (
-          <div className="mb-8 p-4 bg-red-900 border border-red-600 rounded-lg">
-            <div className="flex items-start space-x-2">
-              <span className="text-red-200">⚠️</span>
-              <div>
-                <p className="text-red-200 font-semibold">エラーが発生しました</p>
-                <p className="text-red-300 text-sm mt-1">{error}</p>
-                {error.includes('APIキー') && (
-                  <div className="mt-3 p-3 bg-red-800 rounded text-xs">
-                    <p className="font-semibold mb-2">APIキー設定方法:</p>
-                    <ol className="list-decimal list-inside space-y-1">
-                      <li>Alpha VantageでAPIキーを取得: https://www.alphavantage.co/support/#api-key</li>
-                      <li>プロジェクトルートに .env.local ファイルを作成</li>
-                      <li>NEXT_PUBLIC_ALPHA_VANTAGE_API_KEY=YOUR_API_KEY を記述</li>
-                      <li>開発サーバーを再起動</li>
-                    </ol>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* 株価データ表示 */}
-        {stockData && (
-          <div className="mb-8">
-            <div className="bg-gray-800 p-6 rounded-lg">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-2xl font-bold">{stockData.symbol}</h2>
-                <span className="text-sm text-gray-400">
-                  {new Date(stockData.timestamp).toLocaleString('ja-JP')}
-                </span>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="text-center">
-                  <p className="text-sm text-gray-400">現在価格</p>
-                  <p className="text-3xl font-bold">{formatPrice(stockData.price)}</p>
-                </div>
-                
-                <div className="text-center">
-                  <p className="text-sm text-gray-400">変動額</p>
-                  <p className={`text-2xl font-bold ${
-                    stockData.change >= 0 ? 'text-green-400' : 'text-red-400'
-                  }`}>
-                    {stockData.change >= 0 ? '+' : ''}{formatPrice(stockData.change)}
-                  </p>
-                </div>
-                
-                <div className="text-center">
-                  <p className="text-sm text-gray-400">変動率</p>
-                  <p className={`text-2xl font-bold ${
-                    stockData.changePercent >= 0 ? 'text-green-400' : 'text-red-400'
-                  }`}>
-                    {formatPercent(stockData.changePercent)}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* チャート表示 */}
-        {chartData.length > 0 && (
-          <div className="mb-8">
-            <StockChart data={chartData} symbol={stockData?.symbol || symbol} />
-          </div>
-        )}
-
-        {/* テクニカル指標表示 */}
-        {technicalIndicators && stockData && (
-          <div className="mb-8">
-            <TechnicalIndicators 
-              indicators={technicalIndicators} 
-              currentPrice={stockData.price} 
-            />
-          </div>
-        )}
-
-        {/* 買い時シグナル分析 */}
-        {signalAnalysis && stockData && (
-          <div className="mb-8">
-            <BuySignal 
-              analysis={signalAnalysis} 
-              symbol={stockData.symbol} 
-            />
-          </div>
-        )}
-
-        {/* バックテストセクション */}
-        {chartData.length > 0 && (
-          <div className="mb-8">
-            <div className="bg-gray-800 p-6 rounded-lg">
-              <div className="flex justify-between items-center mb-4">
-                <div>
-                  <h3 className="text-xl font-bold">⚡ 戦略バックテスト</h3>
-                  <p className="text-gray-400 mt-1">
-                    過去30日間のデータを使用して、シグナル戦略の有効性を検証します
-                  </p>
-                </div>
-                <button
-                  onClick={runBacktestAnalysis}
-                  disabled={isBacktesting}
-                  className="px-6 py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 text-white rounded-lg font-semibold transition-colors"
-                >
-                  {isBacktesting ? 'バックテスト実行中...' : 'バックテスト実行'}
-                </button>
-              </div>
-              
-              {backtestResult && (
-                <BacktestResults 
-                  result={backtestResult} 
-                  symbol={stockData?.symbol || symbol}
-                  initialCapital={10000}
-                />
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* チャートデータ表示 */}
-        {chartData.length > 0 && (
-          <div className="mb-8">
-            <div className="bg-gray-800 p-6 rounded-lg">
-              <h3 className="text-xl font-bold mb-4">30日間の価格推移</h3>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-700">
-                      <th className="text-left p-2">日付</th>
-                      <th className="text-right p-2">始値</th>
-                      <th className="text-right p-2">高値</th>
-                      <th className="text-right p-2">安値</th>
-                      <th className="text-right p-2">終値</th>
-                      <th className="text-right p-2">出来高</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {chartData.slice(-10).reverse().map((data, index) => (
-                      <tr key={index} className="border-b border-gray-700">
-                        <td className="p-2">{data.date}</td>
-                        <td className="text-right p-2">{formatPrice(data.open)}</td>
-                        <td className="text-right p-2">{formatPrice(data.high)}</td>
-                        <td className="text-right p-2">{formatPrice(data.low)}</td>
-                        <td className="text-right p-2">{formatPrice(data.close)}</td>
-                        <td className="text-right p-2">{data.volume.toLocaleString()}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* フッター */}
-        <div className="text-center text-gray-400 mt-8">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-            <div className="bg-gray-800 p-4 rounded-lg">
-              <h4 className="font-semibold text-white mb-2">🌐 実データモード</h4>
-              <p className="text-sm">
-                Alpha Vantage APIから実際の株価データを取得。
-                最新の市場情報で正確な分析が可能です。
-              </p>
-            </div>
-            <div className="bg-gray-800 p-4 rounded-lg">
-              <h4 className="font-semibold text-white mb-2">🎭 デモモード</h4>
-              <p className="text-sm">
-                シミュレートされたデータで機能をお試し。
-                APIキーなしでも全機能を体験できます。
-              </p>
-            </div>
-          </div>
-          
-          <p className="text-sm">
-            🎯 高度な機能: テクニカル指標分析、買い時シグナル、バックテスト戦略検証
+    <div className="space-y-6">
+      {/* サマリー統計 */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-gray-700 rounded-lg p-4">
+          <h4 className="text-gray-400 text-sm mb-1">総リターン</h4>
+          <p className={`text-xl font-bold ${getPerformanceColor(result.totalReturn)}`}>
+            {formatCurrency(result.totalReturn)}
           </p>
-          
-          <div className="mt-4 text-xs text-gray-500">
-            <p>現在のデータソース: <span className="font-semibold">{dataSource === 'real' ? 'Alpha Vantage API (実データ)' : 'サンプルデータ (デモ)'}</span></p>
-            {dataSource === 'real' && <p>※ APIレート制限: 1分間に5回、1日500回まで</p>}
+          <p className={`text-sm ${getPerformanceColor(result.totalReturnPercent)}`}>
+            {formatPercent(result.totalReturnPercent)}
+          </p>
+        </div>
+
+        <div className="bg-gray-700 rounded-lg p-4">
+          <h4 className="text-gray-400 text-sm mb-1">勝率</h4>
+          <p className="text-xl font-bold text-blue-400">
+            {formatPercent(result.winRate)}
+          </p>
+          <p className="text-sm text-gray-400">
+            {result.winningTrades}/{result.totalTrades}勝
+          </p>
+        </div>
+
+        <div className="bg-gray-700 rounded-lg p-4">
+          <h4 className="text-gray-400 text-sm mb-1">最大ドローダウン</h4>
+          <p className="text-xl font-bold text-red-400">
+            {formatPercent(result.maxDrawdown)}
+          </p>
+          <p className="text-sm text-gray-400">最大下落幅</p>
+        </div>
+
+        <div className="bg-gray-700 rounded-lg p-4">
+          <h4 className="text-gray-400 text-sm mb-1">シャープレシオ</h4>
+          <p className="text-xl font-bold text-purple-400">
+            {result.sharpeRatio.toFixed(2)}
+          </p>
+          <p className="text-sm text-gray-400">リスク調整後リターン</p>
+        </div>
+      </div>
+
+      {/* パフォーマンス評価 */}
+      <div className="bg-gray-700 rounded-lg p-4">
+        <div className="flex justify-between items-center">
+          <div>
+            <h4 className="text-lg font-semibold mb-2">戦略パフォーマンス</h4>
+            <p className="text-gray-400">
+              初期資金 {formatCurrency(result.initialCapital)} → 最終価値 {formatCurrency(result.finalValue)}
+            </p>
           </div>
+          <div className="text-right">
+            <p className="text-2xl font-bold text-blue-400">
+              {getPerformanceLabel(result.totalReturnPercent)}
+            </p>
+            <p className="text-sm text-gray-400">総合評価</p>
+          </div>
+        </div>
+      </div>
+
+      {/* ポートフォリオ価値チャート */}
+      <div className="bg-gray-700 rounded-lg p-4">
+        <div className="h-64 w-full">
+          <canvas ref={chartRef}></canvas>
+        </div>
+      </div>
+
+      {/* 詳細統計 */}
+      <div className="bg-gray-700 rounded-lg p-4">
+        <h4 className="text-lg font-semibold mb-4">詳細分析</h4>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <h5 className="text-sm font-semibold text-gray-400 mb-3">取引統計</h5>
+            <div className="space-y-2">
+              <div className="flex justify-between">
+                <span className="text-gray-300">総取引数:</span>
+                <span className="text-white">{result.totalTrades}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-300">勝利取引:</span>
+                <span className="text-green-400">{result.winningTrades}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-300">敗北取引:</span>
+                <span className="text-red-400">{result.losingTrades}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-300">勝率:</span>
+                <span className="text-blue-400">{formatPercent(result.winRate)}</span>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <h5 className="text-sm font-semibold text-gray-400 mb-3">リスク指標</h5>
+            <div className="space-y-2">
+              <div className="flex justify-between">
+                <span className="text-gray-300">最大ドローダウン:</span>
+                <span className="text-red-400">{formatPercent(result.maxDrawdown)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-300">シャープレシオ:</span>
+                <span className="text-purple-400">{result.sharpeRatio.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-300">総リターン:</span>
+                <span className={getPerformanceColor(result.totalReturnPercent)}>
+                  {formatPercent(result.totalReturnPercent)}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 最近の取引履歴 */}
+      <div className="bg-gray-700 rounded-lg p-4">
+        <h4 className="text-lg font-semibold mb-4">取引履歴（最新5件）</h4>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-gray-400 border-b border-gray-600">
+                <th className="text-left pb-2">日付</th>
+                <th className="text-left pb-2">アクション</th>
+                <th className="text-right pb-2">価格</th>
+                <th className="text-right pb-2">株数</th>
+                <th className="text-right pb-2">金額</th>
+              </tr>
+            </thead>
+            <tbody>
+              {result.trades.slice(-5).reverse().map((trade, index) => (
+                <tr key={index} className="border-b border-gray-700">
+                  <td className="py-2 text-gray-300">{trade.date}</td>
+                  <td className="py-2">
+                    <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                      trade.action === 'buy' 
+                        ? 'bg-green-600 text-green-100' 
+                        : 'bg-red-600 text-red-100'
+                    }`}>
+                      {trade.action === 'buy' ? '購入' : '売却'}
+                    </span>
+                  </td>
+                  <td className="py-2 text-right text-gray-300">
+                    {formatCurrency(trade.price)}
+                  </td>
+                  <td className="py-2 text-right text-gray-300">
+                    {trade.shares.toLocaleString()}
+                  </td>
+                  <td className="py-2 text-right text-white">
+                    {formatCurrency(trade.totalCost)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* 戦略説明 */}
+      <div className="bg-gray-700 rounded-lg p-4">
+        <h4 className="text-lg font-semibold mb-3">バックテスト戦略</h4>
+        <div className="text-sm text-gray-300 space-y-2">
+          <p>• <strong>買いシグナル:</strong> RSI &lt; 30 または MACD &gt; Signal</p>
+          <p>• <strong>売りシグナル:</strong> RSI &gt; 70 または MACD &lt; Signal</p>
+          <p>• <strong>期間:</strong> 過去30日間のデータを使用</p>
+          <p>• <strong>手数料:</strong> 取引手数料は考慮していません</p>
+          <p>• <strong>注意:</strong> 過去の結果は将来の成果を保証するものではありません</p>
         </div>
       </div>
     </div>

@@ -1,56 +1,118 @@
-interface LatestIndicators {
-  rsi: number | null;
-  macd: {
-    macd: number | null;
-    signal: number | null;
-    histogram: number | null;
+export interface SignalAnalysis {
+  overallScore: number;
+  signals: {
+    rsi: { score: number; reason: string };
+    macd: { score: number; reason: string };
+    movingAverage: { score: number; reason: string };
+    bollinger: { score: number; reason: string };
   };
-  sma: {
+  recommendation: string;
+  confidence: number;
+}
+
+export function analyzeSignals(
+  currentPrice: number,
+  indicators: {
+    rsi: number | null;
+    macd: number | null;
+    macdSignal: number | null;
+    macdHistogram: number | null;
     sma5: number | null;
     sma20: number | null;
     sma50: number | null;
-  };
-  ema: {
-    ema12: number | null;
-    ema26: number | null;
-  };
-  bollingerBands: {
-    upper: number | null;
-    middle: number | null;
-    lower: number | null;
+    bollingerUpper: number | null;
+    bollingerLower: number | null;
+    bollingerMiddle: number | null;
+  }
+): SignalAnalysis {
+  
+  // RSI分析
+  const rsiAnalysis = calculateRSIScore(indicators.rsi);
+  
+  // MACD分析
+  const macdAnalysis = calculateMACDScore(
+    indicators.macd,
+    indicators.macdSignal,
+    indicators.macdHistogram
+  );
+  
+  // 移動平均分析
+  const maAnalysis = calculateMovingAverageScore(
+    currentPrice,
+    indicators.sma5,
+    indicators.sma20,
+    indicators.sma50
+  );
+  
+  // ボリンジャーバンド分析
+  const bollingerAnalysis = calculateBollingerScore(
+    currentPrice,
+    indicators.bollingerUpper,
+    indicators.bollingerLower,
+    indicators.bollingerMiddle
+  );
+  
+  // 総合スコア計算（重み付き平均）
+  const weights = { rsi: 0.25, macd: 0.3, ma: 0.3, bollinger: 0.15 };
+  const totalScore = 
+    (rsiAnalysis.score * weights.rsi) +
+    (macdAnalysis.score * weights.macd) +
+    (maAnalysis.score * weights.ma) +
+    (bollingerAnalysis.score * weights.bollinger);
+  
+  // 0-100スケールに正規化
+  const normalizedScore = Math.max(0, Math.min(100, 50 + totalScore));
+  
+  // 推奨とコンフィデンス
+  const recommendation = getRecommendation(normalizedScore);
+  const confidence = calculateConfidence(normalizedScore, [
+    rsiAnalysis.score,
+    macdAnalysis.score,
+    maAnalysis.score,
+    bollingerAnalysis.score
+  ]);
+  
+  return {
+    overallScore: Math.round(normalizedScore),
+    signals: {
+      rsi: rsiAnalysis,
+      macd: macdAnalysis,
+      movingAverage: maAnalysis,
+      bollinger: bollingerAnalysis
+    },
+    recommendation,
+    confidence
   };
 }
 
-export interface SignalAnalysis {
-  overallScore: number; // -100 to +100
-  signal: 'STRONG_BUY' | 'BUY' | 'HOLD' | 'SELL' | 'STRONG_SELL';
-  confidence: number; // 0 to 100
-  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH';
-  reasons: string[];
-  individualScores: {
-    rsi: number;
-    macd: number;
-    movingAverage: number;
-    bollingerBands: number;
-  };
-  recommendation: string;
-}
-
-// RSIスコア計算 (-25 to +25)
 function calculateRSIScore(rsi: number | null): { score: number; reason: string } {
-  if (rsi === null) return { score: 0, reason: 'RSIデータなし' };
+  if (rsi === null) {
+    return { score: 0, reason: 'RSIデータなし' };
+  }
   
-  if (rsi <= 20) return { score: 25, reason: 'RSI極度の売られすぎ(強い買いシグナル)' };
-  if (rsi <= 30) return { score: 15, reason: 'RSI売られすぎ(買いシグナル)' };
-  if (rsi <= 40) return { score: 5, reason: 'RSI弱い買いシグナル' };
-  if (rsi >= 80) return { score: -25, reason: 'RSI極度の買われすぎ(強い売りシグナル)' };
-  if (rsi >= 70) return { score: -15, reason: 'RSI買われすぎ(売りシグナル)' };
-  if (rsi >= 60) return { score: -5, reason: 'RSI弱い売りシグナル' };
+  let score = 0;
+  let reason = '';
   
-  return { score: 0, reason: 'RSIニュートラル' };
+  if (rsi < 30) {
+    score = 20;
+    reason = `RSI ${rsi.toFixed(1)} - 売られすぎ(買いシグナル)`;
+  } else if (rsi < 40) {
+    score = 10;
+    reason = `RSI ${rsi.toFixed(1)} - やや売られすぎ`;
+  } else if (rsi > 70) {
+    score = -20;
+    reason = `RSI ${rsi.toFixed(1)} - 買われすぎ(売りシグナル)`;
+  } else if (rsi > 60) {
+    score = -10;
+    reason = `RSI ${rsi.toFixed(1)} - やや買われすぎ`;
+  } else {
+    score = 0;
+    reason = `RSI ${rsi.toFixed(1)} - 中立圏`;
+  }
+  
+  return { score, reason };
 }
 
-// MACDスコア計算 (-25 to +25)
 function calculateMACDScore(macd: number | null, signal: number | null, histogram: number | null): { score: number; reason: string } {
   if (macd === null || signal === null || histogram === null) {
     return { score: 0, reason: 'MACDデータなし' };
@@ -83,7 +145,6 @@ function calculateMACDScore(macd: number | null, signal: number | null, histogra
   return { score, reason: reasons.join(', ') };
 }
 
-// 移動平均スコア計算 (-25 to +25)
 function calculateMovingAverageScore(
   currentPrice: number,
   sma5: number | null,
@@ -129,155 +190,62 @@ function calculateMovingAverageScore(
   return { score: Math.max(-25, Math.min(25, score)), reason: reasons.join(', ') };
 }
 
-// ボリンジャーバンドスコア計算 (-25 to +25)
 function calculateBollingerScore(
   currentPrice: number,
   upper: number | null,
-  middle: number | null,
-  lower: number | null
+  lower: number | null,
+  middle: number | null
 ): { score: number; reason: string } {
-  if (upper === null || middle === null || lower === null) {
+  if (upper === null || lower === null || middle === null) {
     return { score: 0, reason: 'ボリンジャーバンドデータなし' };
   }
-  
-  const bandWidth = upper - lower;
-  const pricePosition = (currentPrice - lower) / bandWidth;
   
   let score = 0;
   let reason = '';
   
-  if (pricePosition <= 0.1) {
-    score = 20;
-    reason = 'ボリンジャーバンド下限近く(強い買いシグナル)';
-  } else if (pricePosition <= 0.2) {
+  const bandWidth = upper - lower;
+  const position = (currentPrice - lower) / bandWidth;
+  
+  if (position < 0.2) {
     score = 15;
-    reason = 'ボリンジャーバンド下側(買いシグナル)';
-  } else if (pricePosition >= 0.9) {
-    score = -20;
-    reason = 'ボリンジャーバンド上限近く(強い売りシグナル)';
-  } else if (pricePosition >= 0.8) {
+    reason = '下部バンド付近(買いシグナル)';
+  } else if (position < 0.4) {
+    score = 8;
+    reason = '下半分レンジ(やや買い)';
+  } else if (position > 0.8) {
     score = -15;
-    reason = 'ボリンジャーバンド上側(売りシグナル)';
-  } else if (pricePosition >= 0.4 && pricePosition <= 0.6) {
-    score = 0;
-    reason = 'ボリンジャーバンド中央付近(ニュートラル)';
-  } else if (pricePosition < 0.4) {
-    score = 5;
-    reason = 'ボリンジャーバンド下半分(弱い買いシグナル)';
+    reason = '上部バンド付近(売りシグナル)';
+  } else if (position > 0.6) {
+    score = -8;
+    reason = '上半分レンジ(やや売り)';
   } else {
-    score = -5;
-    reason = 'ボリンジャーバンド上半分(弱い売りシグナル)';
+    score = 0;
+    reason = '中央レンジ(中立)';
   }
   
   return { score, reason };
 }
 
-// 総合シグナル分析
-export function analyzeSignals(indicators: LatestIndicators, currentPrice: number): SignalAnalysis {
-  // 各指標のスコアを計算
-  const rsiResult = calculateRSIScore(indicators.rsi);
-  const macdResult = calculateMACDScore(
-    indicators.macd.macd,
-    indicators.macd.signal,
-    indicators.macd.histogram
-  );
-  const maResult = calculateMovingAverageScore(
-    currentPrice,
-    indicators.sma.sma5,
-    indicators.sma.sma20,
-    indicators.sma.sma50
-  );
-  const bbResult = calculateBollingerScore(
-    currentPrice,
-    indicators.bollingerBands.upper,
-    indicators.bollingerBands.middle,
-    indicators.bollingerBands.lower
-  );
+function getRecommendation(score: number): string {
+  if (score >= 70) return '強い買い推奨';
+  if (score >= 60) return '買い推奨';
+  if (score >= 50) return 'やや買い';
+  if (score >= 40) return '様子見';
+  if (score >= 30) return 'やや売り';
+  return '売り推奨';
+}
+
+function calculateConfidence(overallScore: number, individualScores: number[]): number {
+  // スコアの分散を計算してコンフィデンスを決定
+  const mean = individualScores.reduce((sum, score) => sum + score, 0) / individualScores.length;
+  const variance = individualScores.reduce((sum, score) => sum + Math.pow(score - mean, 2), 0) / individualScores.length;
+  const standardDeviation = Math.sqrt(variance);
   
-  // 総合スコア計算（各指標に重み付け）
-  const weights = {
-    rsi: 1.0,
-    macd: 1.2, // MACDを少し重視
-    movingAverage: 1.1, // 移動平均を少し重視
-    bollingerBands: 0.9
-  };
+  // 標準偏差が小さいほど、つまり各指標が一致しているほどコンフィデンスが高い
+  const baseConfidence = Math.max(50, 100 - standardDeviation * 2);
   
-  const weightedScore = 
-    (rsiResult.score * weights.rsi) +
-    (macdResult.score * weights.macd) +
-    (maResult.score * weights.movingAverage) +
-    (bbResult.score * weights.bollingerBands);
+  // 極端なスコア（0に近いまたは100に近い）ほどコンフィデンスを上げる
+  const extremeBonus = Math.abs(overallScore - 50) * 0.5;
   
-  const totalWeight = weights.rsi + weights.macd + weights.movingAverage + weights.bollingerBands;
-  const overallScore = Math.round(weightedScore / totalWeight * 100) / 100;
-  
-  // シグナル判定
-  let signal: SignalAnalysis['signal'];
-  let confidence: number;
-  let riskLevel: SignalAnalysis['riskLevel'];
-  
-  if (overallScore >= 15) {
-    signal = 'STRONG_BUY';
-    confidence = Math.min(95, 70 + Math.abs(overallScore - 15) * 2);
-    riskLevel = 'MEDIUM';
-  } else if (overallScore >= 5) {
-    signal = 'BUY';
-    confidence = Math.min(85, 60 + Math.abs(overallScore - 5) * 2);
-    riskLevel = 'MEDIUM';
-  } else if (overallScore >= -5) {
-    signal = 'HOLD';
-    confidence = 50 + Math.abs(overallScore) * 2;
-    riskLevel = 'LOW';
-  } else if (overallScore >= -15) {
-    signal = 'SELL';
-    confidence = Math.min(85, 60 + Math.abs(overallScore + 5) * 2);
-    riskLevel = 'MEDIUM';
-  } else {
-    signal = 'STRONG_SELL';
-    confidence = Math.min(95, 70 + Math.abs(overallScore + 15) * 2);
-    riskLevel = 'HIGH';
-  }
-  
-  // 推奨理由の収集
-  const reasons = [
-    rsiResult.reason,
-    macdResult.reason,
-    maResult.reason,
-    bbResult.reason
-  ].filter(reason => reason && !reason.includes('データなし'));
-  
-  // 推奨アクションの生成
-  let recommendation: string;
-  switch (signal) {
-    case 'STRONG_BUY':
-      recommendation = '積極的な買いポジションを検討。ただし、リスク管理を怠らずに。';
-      break;
-    case 'BUY':
-      recommendation = '買いポジションを検討。段階的な投資を推奨。';
-      break;
-    case 'HOLD':
-      recommendation = '現在のポジションを維持。市場動向を継続監視。';
-      break;
-    case 'SELL':
-      recommendation = '売りを検討。利益確定または損切りのタイミング。';
-      break;
-    case 'STRONG_SELL':
-      recommendation = '速やかな売却を検討。リスクが高い状況。';
-      break;
-  }
-  
-  return {
-    overallScore,
-    signal,
-    confidence: Math.round(confidence),
-    riskLevel,
-    reasons,
-    individualScores: {
-      rsi: rsiResult.score,
-      macd: macdResult.score,
-      movingAverage: maResult.score,
-      bollingerBands: bbResult.score
-    },
-    recommendation
-  };
+  return Math.min(95, Math.round(baseConfidence + extremeBonus));
 }
