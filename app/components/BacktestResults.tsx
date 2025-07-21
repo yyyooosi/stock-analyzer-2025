@@ -6,31 +6,8 @@ import { Chart as ChartJS, CategoryScale, LinearScale, LineElement, PointElement
 // Chart.jsの登録
 ChartJS.register(CategoryScale, LinearScale, LineElement, PointElement, Title, Tooltip, Legend);
 
-interface Trade {
-  date: string;
-  action: 'buy' | 'sell';
-  price: number;
-  shares: number;
-  value: number;
-}
-
-interface BacktestResult {
-  initialCapital: number;
-  finalValue: number;
-  totalReturn: number;
-  totalReturnPercent: number;
-  totalTrades: number;
-  winningTrades: number;
-  losingTrades: number;
-  winRate: number;
-  maxDrawdown: number;
-  sharpeRatio: number;
-  trades: Trade[];
-  portfolioHistory: { date: string; value: number }[];
-}
-
 interface BacktestResultsProps {
-  result: BacktestResult;
+  result: any; // 動的に対応するためany型を使用
 }
 
 export default function BacktestResults({ result }: BacktestResultsProps) {
@@ -52,11 +29,11 @@ export default function BacktestResults({ result }: BacktestResultsProps) {
     chartInstance.current = new ChartJS(ctx, {
       type: 'line',
       data: {
-        labels: result.portfolioHistory.map(h => h.date),
+        labels: (result.portfolioHistory || []).map((h: any) => h.date),
         datasets: [
           {
             label: 'ポートフォリオ価値',
-            data: result.portfolioHistory.map(h => h.value),
+            data: (result.portfolioHistory || []).map((h: any) => h.value || h.portfolioValue),
             borderColor: 'rgb(59, 130, 246)',
             backgroundColor: 'rgba(59, 130, 246, 0.1)',
             tension: 0.1,
@@ -160,28 +137,28 @@ export default function BacktestResults({ result }: BacktestResultsProps) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-gray-700 rounded-lg p-4">
           <h4 className="text-gray-400 text-sm mb-1">総リターン</h4>
-          <p className={`text-xl font-bold ${getPerformanceColor(result.totalReturn)}`}>
-            {formatCurrency(result.totalReturn)}
+          <p className={`text-xl font-bold ${getPerformanceColor(result.totalReturn || 0)}`}>
+            {formatCurrency(result.totalReturn || 0)}
           </p>
-          <p className={`text-sm ${getPerformanceColor(result.totalReturnPercent)}`}>
-            {formatPercent(result.totalReturnPercent)}
+          <p className={`text-sm ${getPerformanceColor(result.totalReturnPercent || 0)}`}>
+            {formatPercent(result.totalReturnPercent || 0)}
           </p>
         </div>
 
         <div className="bg-gray-700 rounded-lg p-4">
           <h4 className="text-gray-400 text-sm mb-1">勝率</h4>
           <p className="text-xl font-bold text-blue-400">
-            {formatPercent(result.winRate)}
+            {formatPercent(result.winRate || 0)}
           </p>
           <p className="text-sm text-gray-400">
-            {result.winningTrades}/{result.totalTrades}勝
+            {result.winningTrades || 0}/{result.totalTrades || 0}勝
           </p>
         </div>
 
         <div className="bg-gray-700 rounded-lg p-4">
           <h4 className="text-gray-400 text-sm mb-1">最大ドローダウン</h4>
           <p className="text-xl font-bold text-red-400">
-            {formatPercent(result.maxDrawdown)}
+            {formatPercent(result.maxDrawdown || 0)}
           </p>
           <p className="text-sm text-gray-400">最大下落幅</p>
         </div>
@@ -189,7 +166,7 @@ export default function BacktestResults({ result }: BacktestResultsProps) {
         <div className="bg-gray-700 rounded-lg p-4">
           <h4 className="text-gray-400 text-sm mb-1">シャープレシオ</h4>
           <p className="text-xl font-bold text-purple-400">
-            {result.sharpeRatio.toFixed(2)}
+            {(result.sharpeRatio || 0).toFixed(2)}
           </p>
           <p className="text-sm text-gray-400">リスク調整後リターン</p>
         </div>
@@ -201,12 +178,12 @@ export default function BacktestResults({ result }: BacktestResultsProps) {
           <div>
             <h4 className="text-lg font-semibold mb-2">戦略パフォーマンス</h4>
             <p className="text-gray-400">
-              初期資金 {formatCurrency(result.initialCapital)} → 最終価値 {formatCurrency(result.finalValue)}
+              初期資金 {formatCurrency(result.initialCapital || 10000)} → 最終価値 {formatCurrency(result.finalValue || 10000)}
             </p>
           </div>
           <div className="text-right">
             <p className="text-2xl font-bold text-blue-400">
-              {getPerformanceLabel(result.totalReturnPercent)}
+              {getPerformanceLabel(result.totalReturnPercent || 0)}
             </p>
             <p className="text-sm text-gray-400">総合評価</p>
           </div>
@@ -229,19 +206,19 @@ export default function BacktestResults({ result }: BacktestResultsProps) {
             <div className="space-y-2">
               <div className="flex justify-between">
                 <span className="text-gray-300">総取引数:</span>
-                <span className="text-white">{result.totalTrades}</span>
+                <span className="text-white">{result.totalTrades || 0}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-300">勝利取引:</span>
-                <span className="text-green-400">{result.winningTrades}</span>
+                <span className="text-green-400">{result.winningTrades || 0}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-300">敗北取引:</span>
-                <span className="text-red-400">{result.losingTrades}</span>
+                <span className="text-red-400">{result.losingTrades || 0}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-300">勝率:</span>
-                <span className="text-blue-400">{formatPercent(result.winRate)}</span>
+                <span className="text-blue-400">{formatPercent(result.winRate || 0)}</span>
               </div>
             </div>
           </div>
@@ -251,16 +228,16 @@ export default function BacktestResults({ result }: BacktestResultsProps) {
             <div className="space-y-2">
               <div className="flex justify-between">
                 <span className="text-gray-300">最大ドローダウン:</span>
-                <span className="text-red-400">{formatPercent(result.maxDrawdown)}</span>
+                <span className="text-red-400">{formatPercent(result.maxDrawdown || 0)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-300">シャープレシオ:</span>
-                <span className="text-purple-400">{result.sharpeRatio.toFixed(2)}</span>
+                <span className="text-purple-400">{(result.sharpeRatio || 0).toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-300">総リターン:</span>
-                <span className={getPerformanceColor(result.totalReturnPercent)}>
-                  {formatPercent(result.totalReturnPercent)}
+                <span className={getPerformanceColor(result.totalReturnPercent || 0)}>
+                  {formatPercent(result.totalReturnPercent || 0)}
                 </span>
               </div>
             </div>
@@ -283,7 +260,7 @@ export default function BacktestResults({ result }: BacktestResultsProps) {
               </tr>
             </thead>
             <tbody>
-              {result.trades.slice(-5).reverse().map((trade, index) => (
+              {(result.trades || []).slice(-5).reverse().map((trade: any, index: number) => (
                 <tr key={index} className="border-b border-gray-700">
                   <td className="py-2 text-gray-300">{trade.date}</td>
                   <td className="py-2">
@@ -296,13 +273,13 @@ export default function BacktestResults({ result }: BacktestResultsProps) {
                     </span>
                   </td>
                   <td className="py-2 text-right text-gray-300">
-                    {formatCurrency(trade.price)}
+                    {formatCurrency(trade.price || 0)}
                   </td>
                   <td className="py-2 text-right text-gray-300">
-                    {trade.shares.toLocaleString()}
+                    {(trade.shares || 0).toLocaleString()}
                   </td>
                   <td className="py-2 text-right text-white">
-                    {formatCurrency(trade.value)}
+                    {formatCurrency(trade.totalCost || trade.value || 0)}
                   </td>
                 </tr>
               ))}

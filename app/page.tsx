@@ -1,328 +1,302 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
-import { Chart as ChartJS, CategoryScale, LinearScale, LineElement, PointElement, Title, Tooltip, Legend } from 'chart.js';
+import { useState } from 'react';
+import { fetchStockData } from './utils/stockAPI';
+import { calculateAllIndicators, getLatestIndicators } from './utils/technicalIndicators';
+import { analyzeSignals, SignalAnalysis } from './utils/signalAnalysis';
+import { runBacktest } from './utils/backtest';
+import { StockChart } from './components/StockChart';
+import { TechnicalIndicators } from './components/TechnicalIndicators';
+import { BuySignal } from './components/BuySignal';
+import BacktestResults from './components/BacktestResults';
 
-// Chart.jsの登録
-ChartJS.register(CategoryScale, LinearScale, LineElement, PointElement, Title, Tooltip, Legend);
-
-interface BacktestResultsProps {
-  result: {
-    strategy: string;
-    initialCapital: number;
-    finalValue: number;
-    totalReturn: number;
-    totalReturnPercent: number;
-    trades: Array<{
-      date: string;
-      action: 'buy' | 'sell';
-      price: number;
-      shares: number;
-      totalCost: number;
-      portfolioValue: number;
-    }>;
-    maxDrawdown: number;
-    volatility: number;
-    sharpeRatio: number;
-    winRate: number;
-    totalTrades: number;
-    winningTrades: number;
-    losingTrades: number;
-    portfolioHistory: Array<{
-      date: string;
-      value: number;
-    }>;
-  };
+interface StockData {
+  symbol: string;
+  price: number;
+  change: number;
+  changePercent: number;
+  timestamp: string;
 }
 
-export default function BacktestResults({ result }: BacktestResultsProps) {
-  const chartRef = useRef<HTMLCanvasElement>(null);
-  const chartInstance = useRef<ChartJS | null>(null);
+interface ChartData {
+  date: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
 
-  useEffect(() => {
-    if (!chartRef.current) return;
+export default function Home() {
+  const [stockData, setStockData] = useState<StockData | null>(null);
+  const [chartData, setChartData] = useState<ChartData[]>([]);
+  const [technicalIndicators, setTechnicalIndicators] = useState<ReturnType<typeof getLatestIndicators> | null>(null);
+  const [signalAnalysis, setSignalAnalysis] = useState<SignalAnalysis | null>(null);
+  const [backtestResult, setBacktestResult] = useState<ReturnType<typeof runBacktest> | null>(null);
+  const [isBacktesting, setIsBacktesting] = useState(false);
+  const [symbol, setSymbol] = useState('AAPL');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [useRealData, setUseRealData] = useState(true);
+  const [dataSource, setDataSource] = useState<'real' | 'demo'>('demo');
 
-    const ctx = chartRef.current.getContext('2d');
-    if (!ctx) return;
+  const handleSearch = async () => {
+    if (!symbol.trim()) return;
 
-    // 既存のチャートを破棄
-    if (chartInstance.current) {
-      chartInstance.current.destroy();
+    setLoading(true);
+    setError(null);
+    setBacktestResult(null);
+
+    try {
+      const { stock, chart } = await fetchStockData(symbol, useRealData);
+      
+      setStockData(stock);
+      setChartData(chart);
+
+      // テクニカル指標の計算
+      const indicators = calculateAllIndicators(chart);
+      const latestIndicators = getLatestIndicators(indicators);
+      setTechnicalIndicators(latestIndicators);
+
+      // シグナル分析用のデータ変換
+      const signalData = {
+        rsi: latestIndicators.rsi,
+        macd: latestIndicators.macd.macd,
+        macdSignal: latestIndicators.macd.signal,
+        macdHistogram: latestIndicators.macd.histogram,
+        sma5: latestIndicators.sma.sma5,
+        sma20: latestIndicators.sma.sma20,
+        sma50: latestIndicators.sma.sma50,
+        bollingerUpper: latestIndicators.bollingerBands.upper,
+        bollingerLower: latestIndicators.bollingerBands.lower,
+        bollingerMiddle: latestIndicators.bollingerBands.middle
+      };
+
+      // シグナル分析の実行
+      const signals = analyzeSignals(stock.price, signalData);
+      setSignalAnalysis(signals);
+
+    } catch (err) {
+      console.error('データ取得エラー:', err);
+      setError(err instanceof Error ? err.message : 'データの取得に失敗しました');
+    } finally {
+      setLoading(false);
     }
+  };
 
-    // 新しいチャートを作成
-    chartInstance.current = new ChartJS(ctx, {
-      type: 'line',
-      data: {
-        labels: result.portfolioHistory.map(h => h.date),
-        datasets: [
-          {
-            label: 'ポートフォリオ価値',
-            data: result.portfolioHistory.map(h => h.value),
-            borderColor: 'rgb(59, 130, 246)',
-            backgroundColor: 'rgba(59, 130, 246, 0.1)',
-            tension: 0.1,
-            fill: true
-          }
-        ]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          title: {
-            display: true,
-            text: 'ポートフォリオ価値の推移',
-            color: 'rgb(243, 244, 246)'
-          },
-          legend: {
-            labels: {
-              color: 'rgb(156, 163, 175)'
-            }
-          },
-          tooltip: {
-            backgroundColor: 'rgba(17, 24, 39, 0.9)',
-            titleColor: 'rgb(243, 244, 246)',
-            bodyColor: 'rgb(156, 163, 175)',
-            borderColor: 'rgb(75, 85, 99)',
-            borderWidth: 1,
-            callbacks: {
-              label: function(context: { dataset: { label?: string }; parsed: { y: number } }) {
-                const label = context.dataset.label || '';
-                const value = context.parsed.y;
-                return `${label}: ${formatCurrency(value)}`;
-              }
-            }
-          }
-        },
-        scales: {
-          x: {
-            grid: {
-              color: 'rgba(75, 85, 99, 0.3)'
-            },
-            ticks: {
-              color: 'rgb(156, 163, 175)'
-            }
-          },
-          y: {
-            grid: {
-              color: 'rgba(75, 85, 99, 0.3)'
-            },
-            ticks: {
-              color: 'rgb(156, 163, 175)',
-              callback: function(value: string | number) {
-                return formatCurrency(Number(value));
-              }
-            },
-            beginAtZero: false
-          }
-        }
+  const handleBacktest = async () => {
+    if (!chartData.length || !technicalIndicators) return;
+
+    setIsBacktesting(true);
+    
+    // バックテストは計算量が多いため、少し遅延を入れてUIの応答性を保つ
+    setTimeout(() => {
+      try {
+        const config = {
+          initialCapital: 10000,
+          commissionRate: 0.001, // 0.1%の手数料
+          riskPerTrade: 0.02,    // 1取引あたり2%のリスク
+          stopLossPercent: 0.05, // 5%のストップロス
+          takeProfitPercent: 0.10 // 10%のテイクプロフィット
+        };
+        const result = runBacktest(chartData, config);
+        setBacktestResult(result);
+      } catch (err) {
+        console.error('バックテストエラー:', err);
+        setError('バックテストの実行に失敗しました');
+      } finally {
+        setIsBacktesting(false);
       }
-    });
-
-    // クリーンアップ関数
-    return () => {
-      if (chartInstance.current) {
-        chartInstance.current.destroy();
-        chartInstance.current = null;
-      }
-    };
-  }, [result]);
-
-  const formatCurrency = (value: number): string => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    }).format(value);
+    }, 100);
   };
 
-  const formatPercent = (value: number): string => {
-    return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
+  const toggleDataSource = () => {
+    const newSource = dataSource === 'demo' ? 'real' : 'demo';
+    setDataSource(newSource);
+    setUseRealData(newSource === 'real');
   };
 
-  const getPerformanceColor = (value: number): string => {
-    if (value > 0) return 'text-green-400';
-    if (value < 0) return 'text-red-400';
-    return 'text-gray-400';
+  const getSignalColor = (analysis: SignalAnalysis | null) => {
+    if (!analysis) return 'text-gray-400';
+    if (analysis.overallScore >= 60) return 'text-green-400';
+    if (analysis.overallScore >= 40) return 'text-yellow-400';
+    return 'text-red-400';
   };
 
-  const getPerformanceLabel = (returnPercent: number): string => {
-    if (returnPercent > 20) return '優秀';
-    if (returnPercent > 10) return '良好';
-    if (returnPercent > 0) return 'プラス';
-    if (returnPercent > -10) return 'マイナス';
-    return '要改善';
+  const getSignalMessage = (analysis: SignalAnalysis | null) => {
+    if (!analysis) return '分析準備中';
+    if (analysis.overallScore >= 60) return '買い推奨';
+    if (analysis.overallScore >= 40) return '様子見';
+    return '買い控え推奨';
   };
 
   return (
-    <div className="space-y-6">
-      {/* サマリー統計 */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-gray-700 rounded-lg p-4">
-          <h4 className="text-gray-400 text-sm mb-1">総リターン</h4>
-          <p className={`text-xl font-bold ${getPerformanceColor(result.totalReturn)}`}>
-            {formatCurrency(result.totalReturn)}
-          </p>
-          <p className={`text-sm ${getPerformanceColor(result.totalReturnPercent)}`}>
-            {formatPercent(result.totalReturnPercent)}
-          </p>
-        </div>
-
-        <div className="bg-gray-700 rounded-lg p-4">
-          <h4 className="text-gray-400 text-sm mb-1">勝率</h4>
-          <p className="text-xl font-bold text-blue-400">
-            {formatPercent(result.winRate)}
-          </p>
-          <p className="text-sm text-gray-400">
-            {result.winningTrades}/{result.totalTrades}勝
-          </p>
-        </div>
-
-        <div className="bg-gray-700 rounded-lg p-4">
-          <h4 className="text-gray-400 text-sm mb-1">最大ドローダウン</h4>
-          <p className="text-xl font-bold text-red-400">
-            {formatPercent(result.maxDrawdown)}
-          </p>
-          <p className="text-sm text-gray-400">最大下落幅</p>
-        </div>
-
-        <div className="bg-gray-700 rounded-lg p-4">
-          <h4 className="text-gray-400 text-sm mb-1">シャープレシオ</h4>
-          <p className="text-xl font-bold text-purple-400">
-            {result.sharpeRatio.toFixed(2)}
-          </p>
-          <p className="text-sm text-gray-400">リスク調整後リターン</p>
-        </div>
-      </div>
-
-      {/* パフォーマンス評価 */}
-      <div className="bg-gray-700 rounded-lg p-4">
-        <div className="flex justify-between items-center">
-          <div>
-            <h4 className="text-lg font-semibold mb-2">戦略パフォーマンス</h4>
-            <p className="text-gray-400">
-              初期資金 {formatCurrency(result.initialCapital)} → 最終価値 {formatCurrency(result.finalValue)}
-            </p>
-          </div>
-          <div className="text-right">
-            <p className="text-2xl font-bold text-blue-400">
-              {getPerformanceLabel(result.totalReturnPercent)}
-            </p>
-            <p className="text-sm text-gray-400">総合評価</p>
-          </div>
-        </div>
-      </div>
-
-      {/* ポートフォリオ価値チャート */}
-      <div className="bg-gray-700 rounded-lg p-4">
-        <div className="h-64 w-full">
-          <canvas ref={chartRef}></canvas>
-        </div>
-      </div>
-
-      {/* 詳細統計 */}
-      <div className="bg-gray-700 rounded-lg p-4">
-        <h4 className="text-lg font-semibold mb-4">詳細分析</h4>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <h5 className="text-sm font-semibold text-gray-400 mb-3">取引統計</h5>
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <span className="text-gray-300">総取引数:</span>
-                <span className="text-white">{result.totalTrades}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-300">勝利取引:</span>
-                <span className="text-green-400">{result.winningTrades}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-300">敗北取引:</span>
-                <span className="text-red-400">{result.losingTrades}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-300">勝率:</span>
-                <span className="text-blue-400">{formatPercent(result.winRate)}</span>
-              </div>
+    <div className="min-h-screen bg-gray-900 text-white">
+      <div className="container mx-auto px-4 py-8">
+        {/* ヘッダー */}
+        <header className="text-center mb-8">
+          <div className="flex justify-between items-center mb-4">
+            <h1 className="text-4xl font-bold">米国株分析ツール</h1>
+            <div className="flex items-center gap-4">
+              <span className="text-gray-400">データソース:</span>
+              <button
+                onClick={toggleDataSource}
+                className={`px-4 py-2 rounded-lg transition-colors ${
+                  dataSource === 'real'
+                    ? 'bg-blue-600 hover:bg-blue-700'
+                    : 'bg-green-600 hover:bg-green-700'
+                }`}
+              >
+                {dataSource === 'real' ? '🌐 実データ' : '🎭 デモ'}
+              </button>
+              {dataSource === 'real' && (
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                  <span className="text-xs text-gray-400">Alpha Vantage API</span>
+                </div>
+              )}
             </div>
           </div>
+          <p className="text-gray-400">経験豊富な投資家向けの高度な株価分析システム</p>
+        </header>
 
-          <div>
-            <h5 className="text-sm font-semibold text-gray-400 mb-3">リスク指標</h5>
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <span className="text-gray-300">最大ドローダウン:</span>
-                <span className="text-red-400">{formatPercent(result.maxDrawdown)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-300">シャープレシオ:</span>
-                <span className="text-purple-400">{result.sharpeRatio.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-300">総リターン:</span>
-                <span className={getPerformanceColor(result.totalReturnPercent)}>
-                  {formatPercent(result.totalReturnPercent)}
-                </span>
-              </div>
-            </div>
+        {/* 検索セクション */}
+        <div className="flex justify-center mb-8">
+          <div className="flex gap-4 w-full max-w-md">
+            <input
+              type="text"
+              value={symbol}
+              onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+              placeholder="株式シンボル (例: AAPL, MSFT)"
+              className="flex-1 px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500"
+              onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+            />
+            <button
+              onClick={handleSearch}
+              disabled={loading}
+              className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 rounded-lg transition-colors"
+            >
+              {loading ? '検索中...' : '検索'}
+            </button>
           </div>
         </div>
-      </div>
 
-      {/* 最近の取引履歴 */}
-      <div className="bg-gray-700 rounded-lg p-4">
-        <h4 className="text-lg font-semibold mb-4">取引履歴（最新5件）</h4>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-gray-400 border-b border-gray-600">
-                <th className="text-left pb-2">日付</th>
-                <th className="text-left pb-2">アクション</th>
-                <th className="text-right pb-2">価格</th>
-                <th className="text-right pb-2">株数</th>
-                <th className="text-right pb-2">金額</th>
-              </tr>
-            </thead>
-            <tbody>
-              {result.trades.slice(-5).reverse().map((trade, index) => (
-                <tr key={index} className="border-b border-gray-700">
-                  <td className="py-2 text-gray-300">{trade.date}</td>
-                  <td className="py-2">
-                    <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                      trade.action === 'buy' 
-                        ? 'bg-green-600 text-green-100' 
-                        : 'bg-red-600 text-red-100'
-                    }`}>
-                      {trade.action === 'buy' ? '購入' : '売却'}
-                    </span>
-                  </td>
-                  <td className="py-2 text-right text-gray-300">
-                    {formatCurrency(trade.price)}
-                  </td>
-                  <td className="py-2 text-right text-gray-300">
-                    {trade.shares.toLocaleString()}
-                  </td>
-                  <td className="py-2 text-right text-white">
-                    {formatCurrency(trade.totalCost)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+        {/* エラー表示 */}
+        {error && (
+          <div className="bg-red-900 border border-red-700 text-red-200 px-4 py-3 rounded-lg mb-6">
+            {error}
+          </div>
+        )}
 
-      {/* 戦略説明 */}
-      <div className="bg-gray-700 rounded-lg p-4">
-        <h4 className="text-lg font-semibold mb-3">バックテスト戦略</h4>
-        <div className="text-sm text-gray-300 space-y-2">
-          <p>• <strong>買いシグナル:</strong> RSI &lt; 30 または MACD &gt; Signal</p>
-          <p>• <strong>売りシグナル:</strong> RSI &gt; 70 または MACD &lt; Signal</p>
-          <p>• <strong>期間:</strong> 過去30日間のデータを使用</p>
-          <p>• <strong>手数料:</strong> 取引手数料は考慮していません</p>
-          <p>• <strong>注意:</strong> 過去の結果は将来の成果を保証するものではありません</p>
-        </div>
+        {/* メインコンテンツ */}
+        {stockData && (
+          <div className="space-y-8">
+            {/* 株価情報 */}
+            <div className="bg-gray-800 rounded-lg p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-2xl font-bold">{stockData.symbol}</h2>
+                <span className="text-sm text-gray-400">{new Date(stockData.timestamp).toLocaleString('ja-JP')}</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                  <h3 className="text-gray-400 text-sm mb-1">現在価格</h3>
+                  <p className="text-3xl font-bold">${stockData.price.toFixed(2)}</p>
+                </div>
+                <div>
+                  <h3 className="text-gray-400 text-sm mb-1">変動額</h3>
+                  <p className={`text-2xl font-bold ${stockData.change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    {stockData.change >= 0 ? '+' : ''}${stockData.change.toFixed(2)}
+                  </p>
+                </div>
+                <div>
+                  <h3 className="text-gray-400 text-sm mb-1">変動率</h3>
+                  <p className={`text-2xl font-bold ${stockData.changePercent >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    {stockData.changePercent >= 0 ? '+' : ''}{stockData.changePercent.toFixed(2)}%
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* チャート */}
+            <StockChart data={chartData} symbol={stockData.symbol} />
+
+            {/* テクニカル指標 */}
+            {technicalIndicators && (
+              <TechnicalIndicators 
+                indicators={technicalIndicators} 
+                currentPrice={stockData.price}
+              />
+            )}
+
+            {/* 買いシグナル分析 */}
+            {signalAnalysis && (
+              <BuySignal 
+                analysis={signalAnalysis} 
+                symbol={stockData.symbol}
+              />
+            )}
+
+            {/* バックテストセクション */}
+            <div className="bg-gray-800 rounded-lg p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-bold">バックテスト分析</h3>
+                <button
+                  onClick={handleBacktest}
+                  disabled={isBacktesting || !chartData.length}
+                  className="px-6 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 rounded-lg transition-colors"
+                >
+                  {isBacktesting ? 'バックテスト実行中...' : 'バックテスト実行'}
+                </button>
+              </div>
+              
+              {backtestResult && (
+                <BacktestResults result={backtestResult} />
+              )}
+              
+              {!backtestResult && !isBacktesting && (
+                <p className="text-gray-400">
+                  「バックテスト実行」ボタンをクリックして、過去30日間の取引戦略の効果を分析できます。
+                </p>
+              )}
+            </div>
+
+            {/* 総合判定 */}
+            {signalAnalysis && (
+              <div className="bg-gray-800 rounded-lg p-6">
+                <h3 className="text-xl font-bold mb-4">総合投資判定</h3>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-gray-400 mb-2">AIによる総合スコア</p>
+                    <p className="text-3xl font-bold">{signalAnalysis.overallScore}/100</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-gray-400 mb-2">推奨アクション</p>
+                    <p className={`text-2xl font-bold ${getSignalColor(signalAnalysis)}`}>
+                      {getSignalMessage(signalAnalysis)}
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-4 bg-gray-700 rounded-lg h-2">
+                  <div 
+                    className={`h-2 rounded-lg transition-all duration-500 ${
+                      signalAnalysis.overallScore >= 60 ? 'bg-green-400' :
+                      signalAnalysis.overallScore >= 40 ? 'bg-yellow-400' : 'bg-red-400'
+                    }`}
+                    style={{ width: `${signalAnalysis.overallScore}%` }}
+                  ></div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 初期状態のメッセージ */}
+        {!stockData && !loading && (
+          <div className="text-center text-gray-400 mt-12">
+            <p className="text-xl mb-4">株式シンボルを入力して分析を開始してください</p>
+            <p className="text-sm">例: AAPL (Apple), MSFT (Microsoft), GOOGL (Google), TSLA (Tesla)</p>
+          </div>
+        )}
       </div>
     </div>
   );

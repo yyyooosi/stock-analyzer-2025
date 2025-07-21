@@ -1,11 +1,13 @@
 export interface SignalAnalysis {
   overallScore: number;
+  signal: 'BUY' | 'SELL' | 'HOLD';
   signals: {
     rsi: { score: number; reason: string };
     macd: { score: number; reason: string };
     movingAverage: { score: number; reason: string };
-    bollinger: { score: number; reason: string };
+    bollingerBands: { score: number; reason: string };
   };
+  reasons: string[];
   recommendation: string;
   confidence: number;
 }
@@ -63,6 +65,9 @@ export function analyzeSignals(
   // 0-100スケールに正規化
   const normalizedScore = Math.max(0, Math.min(100, 50 + totalScore));
   
+  // シグナルの決定
+  const signal = getSignal(normalizedScore);
+  
   // 推奨とコンフィデンス
   const recommendation = getRecommendation(normalizedScore);
   const confidence = calculateConfidence(normalizedScore, [
@@ -71,15 +76,25 @@ export function analyzeSignals(
     maAnalysis.score,
     bollingerAnalysis.score
   ]);
+
+  // 理由をまとめる
+  const reasons = [
+    rsiAnalysis.reason,
+    macdAnalysis.reason,
+    maAnalysis.reason,
+    bollingerAnalysis.reason
+  ];
   
   return {
     overallScore: Math.round(normalizedScore),
+    signal,
     signals: {
       rsi: rsiAnalysis,
       macd: macdAnalysis,
       movingAverage: maAnalysis,
-      bollinger: bollingerAnalysis
+      bollingerBands: bollingerAnalysis
     },
+    reasons,
     recommendation,
     confidence
   };
@@ -233,6 +248,12 @@ function getRecommendation(score: number): string {
   if (score >= 40) return '様子見';
   if (score >= 30) return 'やや売り';
   return '売り推奨';
+}
+
+function getSignal(score: number): 'BUY' | 'SELL' | 'HOLD' {
+  if (score >= 60) return 'BUY';
+  if (score <= 40) return 'SELL';
+  return 'HOLD';
 }
 
 function calculateConfidence(overallScore: number, individualScores: number[]): number {
