@@ -62,7 +62,7 @@ export default function BacktestResults({ result }: BacktestResultsProps) {
             borderColor: 'rgb(75, 85, 99)',
             borderWidth: 1,
             callbacks: {
-              label: function(context: { dataset: { label?: string }; parsed: { y: number } }) {
+              label: function(context: any) {
                 const label = context.dataset.label || '';
                 const value = context.parsed.y;
                 return `${label}: ${formatCurrency(value)}`;

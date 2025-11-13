@@ -5,10 +5,13 @@ import { fetchStockData } from './utils/stockAPI';
 import { calculateAllIndicators, getLatestIndicators } from './utils/technicalIndicators';
 import { analyzeSignals, SignalAnalysis } from './utils/signalAnalysis';
 import { runBacktest } from './utils/backtest';
+import { fetchCrashTweets } from './utils/twitterAPI';
+import { predictCrash, CrashPrediction, integrateWithTechnicalAnalysis } from './utils/crashPrediction';
 import { StockChart } from './components/StockChart';
 import { TechnicalIndicators } from './components/TechnicalIndicators';
 import { BuySignal } from './components/BuySignal';
 import BacktestResults from './components/BacktestResults';
+import { CrashPredictionComponent } from './components/CrashPrediction';
 
 interface StockData {
   symbol: string;
@@ -33,7 +36,9 @@ export default function Home() {
   const [technicalIndicators, setTechnicalIndicators] = useState<ReturnType<typeof getLatestIndicators> | null>(null);
   const [signalAnalysis, setSignalAnalysis] = useState<SignalAnalysis | null>(null);
   const [backtestResult, setBacktestResult] = useState<ReturnType<typeof runBacktest> | null>(null);
+  const [crashPrediction, setCrashPrediction] = useState<CrashPrediction | null>(null);
   const [isBacktesting, setIsBacktesting] = useState(false);
+  const [isAnalyzingCrash, setIsAnalyzingCrash] = useState(false);
   const [symbol, setSymbol] = useState('AAPL');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,10 +51,11 @@ export default function Home() {
     setLoading(true);
     setError(null);
     setBacktestResult(null);
+    setCrashPrediction(null);
 
     try {
       const { stock, chart } = await fetchStockData(symbol, useRealData);
-      
+
       setStockData(stock);
       setChartData(chart);
 
@@ -81,6 +87,32 @@ export default function Home() {
       setError(err instanceof Error ? err.message : 'データの取得に失敗しました');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCrashAnalysis = async () => {
+    if (!symbol.trim()) return;
+
+    setIsAnalyzingCrash(true);
+    setError(null);
+
+    try {
+      console.log(`${symbol}に関する暴落予測分析を開始...`);
+
+      // X投稿を取得
+      const tweetResult = await fetchCrashTweets(symbol, useRealData, 100);
+      console.log(`${tweetResult.meta.resultCount}件のツイートを取得しました`);
+
+      // 暴落予測を実行
+      const prediction = predictCrash(tweetResult.tweets);
+      setCrashPrediction(prediction);
+
+      console.log('暴落予測分析が完了しました');
+    } catch (err) {
+      console.error('暴落予測分析エラー:', err);
+      setError(err instanceof Error ? err.message : '暴落予測分析に失敗しました');
+    } finally {
+      setIsAnalyzingCrash(false);
     }
   };
 
@@ -248,14 +280,41 @@ export default function Home() {
                   {isBacktesting ? 'バックテスト実行中...' : 'バックテスト実行'}
                 </button>
               </div>
-              
+
               {backtestResult && (
                 <BacktestResults result={backtestResult} />
               )}
-              
+
               {!backtestResult && !isBacktesting && (
                 <p className="text-gray-400">
                   「バックテスト実行」ボタンをクリックして、過去30日間の取引戦略の効果を分析できます。
+                </p>
+              )}
+            </div>
+
+            {/* 暴落予測分析セクション */}
+            <div className="bg-gray-800 rounded-lg p-6">
+              <div className="flex justify-between items-center mb-4">
+                <div>
+                  <h3 className="text-xl font-bold">暴落予測分析（X投稿センチメント）</h3>
+                  <p className="text-sm text-gray-400 mt-1">X（旧Twitter）の投稿からネガティブワードを分析</p>
+                </div>
+                <button
+                  onClick={handleCrashAnalysis}
+                  disabled={isAnalyzingCrash}
+                  className="px-6 py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 rounded-lg transition-colors"
+                >
+                  {isAnalyzingCrash ? '分析中...' : '暴落リスク分析'}
+                </button>
+              </div>
+
+              {crashPrediction && (
+                <CrashPredictionComponent prediction={crashPrediction} symbol={stockData.symbol} />
+              )}
+
+              {!crashPrediction && !isAnalyzingCrash && (
+                <p className="text-gray-400">
+                  「暴落リスク分析」ボタンをクリックして、X投稿のネガティブセンチメントから暴落リスクを分析できます。
                 </p>
               )}
             </div>
@@ -264,27 +323,92 @@ export default function Home() {
             {signalAnalysis && (
               <div className="bg-gray-800 rounded-lg p-6">
                 <h3 className="text-xl font-bold mb-4">総合投資判定</h3>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-gray-400 mb-2">AIによる総合スコア</p>
-                    <p className="text-3xl font-bold">{signalAnalysis.overallScore}/100</p>
+
+                {/* テクニカル分析スコア */}
+                <div className="mb-6">
+                  <h4 className="text-lg font-semibold mb-3 text-gray-300">テクニカル分析</h4>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-gray-400 mb-2">テクニカルスコア</p>
+                      <p className="text-2xl font-bold">{signalAnalysis.overallScore}/100</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-gray-400 mb-2">シグナル</p>
+                      <p className={`text-xl font-bold ${getSignalColor(signalAnalysis)}`}>
+                        {getSignalMessage(signalAnalysis)}
+                      </p>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-gray-400 mb-2">推奨アクション</p>
-                    <p className={`text-2xl font-bold ${getSignalColor(signalAnalysis)}`}>
-                      {getSignalMessage(signalAnalysis)}
-                    </p>
+                  <div className="mt-3 bg-gray-700 rounded-lg h-2">
+                    <div
+                      className={`h-2 rounded-lg transition-all duration-500 ${
+                        signalAnalysis.overallScore >= 60 ? 'bg-green-400' :
+                        signalAnalysis.overallScore >= 40 ? 'bg-yellow-400' : 'bg-red-400'
+                      }`}
+                      style={{ width: `${signalAnalysis.overallScore}%` }}
+                    ></div>
                   </div>
                 </div>
-                <div className="mt-4 bg-gray-700 rounded-lg h-2">
-                  <div 
-                    className={`h-2 rounded-lg transition-all duration-500 ${
-                      signalAnalysis.overallScore >= 60 ? 'bg-green-400' :
-                      signalAnalysis.overallScore >= 40 ? 'bg-yellow-400' : 'bg-red-400'
-                    }`}
-                    style={{ width: `${signalAnalysis.overallScore}%` }}
-                  ></div>
-                </div>
+
+                {/* 統合判定（暴落予測込み） */}
+                {crashPrediction && (() => {
+                  const integrated = integrateWithTechnicalAnalysis(
+                    crashPrediction,
+                    signalAnalysis.signal,
+                    signalAnalysis.overallScore
+                  );
+
+                  const getIntegratedColor = (signal: string) => {
+                    if (signal === 'STRONG_BUY') return 'text-green-500';
+                    if (signal === 'BUY') return 'text-green-400';
+                    if (signal === 'HOLD') return 'text-yellow-400';
+                    if (signal === 'SELL') return 'text-orange-400';
+                    if (signal === 'STRONG_SELL') return 'text-red-500';
+                    return 'text-gray-400';
+                  };
+
+                  const getIntegratedLabel = (signal: string) => {
+                    if (signal === 'STRONG_BUY') return '強い買い推奨';
+                    if (signal === 'BUY') return '買い推奨';
+                    if (signal === 'HOLD') return '様子見';
+                    if (signal === 'SELL') return '売り推奨';
+                    if (signal === 'STRONG_SELL') return '強い売り推奨';
+                    return '判定不能';
+                  };
+
+                  return (
+                    <div className="border-t border-gray-700 pt-6">
+                      <h4 className="text-lg font-semibold mb-3 text-blue-400">統合判定（センチメント + テクニカル）</h4>
+                      <div className="flex items-center justify-between mb-4">
+                        <div>
+                          <p className="text-gray-400 mb-2">最終スコア</p>
+                          <p className="text-3xl font-bold">{integrated.finalScore}/100</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-gray-400 mb-2">最終判定</p>
+                          <p className={`text-2xl font-bold ${getIntegratedColor(integrated.finalSignal)}`}>
+                            {getIntegratedLabel(integrated.finalSignal)}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="bg-gray-700 rounded-lg h-3">
+                        <div
+                          className={`h-3 rounded-lg transition-all duration-500 ${
+                            integrated.finalScore >= 70 ? 'bg-green-500' :
+                            integrated.finalScore >= 55 ? 'bg-green-400' :
+                            integrated.finalScore >= 45 ? 'bg-yellow-400' :
+                            integrated.finalScore >= 30 ? 'bg-orange-400' :
+                            'bg-red-500'
+                          }`}
+                          style={{ width: `${integrated.finalScore}%` }}
+                        ></div>
+                      </div>
+                      <p className="mt-4 text-sm text-gray-400 bg-gray-700 rounded-lg p-3">
+                        {integrated.reasoning}
+                      </p>
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </div>
