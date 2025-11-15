@@ -44,7 +44,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [useRealData, setUseRealData] = useState(true);
-  const [dataSource, setDataSource] = useState<'real' | 'demo'>('demo');
+  const [dataSource, setDataSource] = useState<'real' | 'demo'>('real');
 
   const handleSearch = async () => {
     if (!symbol.trim()) return;
