@@ -5,7 +5,7 @@ import { fetchStockData } from './utils/stockAPI';
 import { calculateAllIndicators, getLatestIndicators } from './utils/technicalIndicators';
 import { analyzeSignals, SignalAnalysis } from './utils/signalAnalysis';
 import { runBacktest } from './utils/backtest';
-import { fetchCrashTweets } from './utils/twitterAPI';
+import { fetchCrashTweets, Tweet } from './utils/twitterAPI';
 import { predictCrash, CrashPrediction, integrateWithTechnicalAnalysis } from './utils/crashPrediction';
 import { StockChart } from './components/StockChart';
 import { TechnicalIndicators } from './components/TechnicalIndicators';
@@ -37,6 +37,7 @@ export default function Home() {
   const [signalAnalysis, setSignalAnalysis] = useState<SignalAnalysis | null>(null);
   const [backtestResult, setBacktestResult] = useState<ReturnType<typeof runBacktest> | null>(null);
   const [crashPrediction, setCrashPrediction] = useState<CrashPrediction | null>(null);
+  const [crashTweets, setCrashTweets] = useState<Tweet[]>([]);
   const [isBacktesting, setIsBacktesting] = useState(false);
   const [isAnalyzingCrash, setIsAnalyzingCrash] = useState(false);
   const [symbol, setSymbol] = useState('AAPL');
@@ -102,6 +103,9 @@ export default function Home() {
       // X投稿を取得
       const tweetResult = await fetchCrashTweets(symbol, useRealData, 100);
       console.log(`${tweetResult.meta.resultCount}件のツイートを取得しました`);
+
+      // ツイートを保存
+      setCrashTweets(tweetResult.tweets);
 
       // 暴落予測を実行
       const prediction = predictCrash(tweetResult.tweets);
@@ -309,7 +313,11 @@ export default function Home() {
               </div>
 
               {crashPrediction && (
-                <CrashPredictionComponent prediction={crashPrediction} symbol={stockData.symbol} />
+                <CrashPredictionComponent
+                  prediction={crashPrediction}
+                  symbol={stockData.symbol}
+                  tweets={crashTweets}
+                />
               )}
 
               {!crashPrediction && !isAnalyzingCrash && (

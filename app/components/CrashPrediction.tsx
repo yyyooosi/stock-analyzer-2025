@@ -1,13 +1,18 @@
 'use client';
 
+import { useState } from 'react';
 import { CrashPrediction } from '../utils/crashPrediction';
+import { Tweet } from '../utils/twitterAPI';
 
 interface CrashPredictionProps {
   prediction: CrashPrediction;
   symbol: string;
+  tweets: Tweet[];
 }
 
-export function CrashPredictionComponent({ prediction, symbol }: CrashPredictionProps) {
+export function CrashPredictionComponent({ prediction, symbol, tweets }: CrashPredictionProps) {
+  const [showAllTweets, setShowAllTweets] = useState(false);
+  const displayTweets = showAllTweets ? tweets : tweets.slice(0, 10);
   // リスクレベルに応じた色
   const getRiskColor = (level: string) => {
     switch (level) {
@@ -218,10 +223,91 @@ export function CrashPredictionComponent({ prediction, symbol }: CrashPrediction
         </div>
       )}
 
+      {/* X投稿一覧 */}
+      {tweets.length > 0 && (
+        <div className="bg-gray-700 rounded-lg p-4">
+          <div className="flex justify-between items-center mb-4">
+            <h4 className="text-lg font-semibold text-gray-300">
+              分析対象のX投稿 ({tweets.length}件)
+            </h4>
+            {tweets.length > 10 && (
+              <button
+                onClick={() => setShowAllTweets(!showAllTweets)}
+                className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-sm transition-colors"
+              >
+                {showAllTweets ? '最初の10件のみ表示' : `すべて表示 (${tweets.length}件)`}
+              </button>
+            )}
+          </div>
+
+          <div className="space-y-3 max-h-96 overflow-y-auto">
+            {displayTweets.map((tweet) => {
+              const tweetDate = new Date(tweet.createdAt);
+              const timeAgo = getTimeAgo(tweetDate);
+              const totalEngagement =
+                tweet.publicMetrics.retweetCount +
+                tweet.publicMetrics.likeCount +
+                tweet.publicMetrics.replyCount +
+                tweet.publicMetrics.quoteCount;
+
+              return (
+                <div
+                  key={tweet.id}
+                  className="bg-gray-800 rounded-lg p-3 border border-gray-600 hover:border-gray-500 transition-colors"
+                >
+                  {/* ツイートヘッダー */}
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-blue-400">@{tweet.authorUsername}</span>
+                      <span className="text-xs text-gray-500">{timeAgo}</span>
+                    </div>
+                    {totalEngagement >= 100 && (
+                      <span className="px-2 py-0.5 bg-orange-900/40 text-orange-300 rounded text-xs">
+                        🔥 バイラル
+                      </span>
+                    )}
+                  </div>
+
+                  {/* ツイート本文 */}
+                  <p className="text-gray-200 text-sm mb-3 whitespace-pre-wrap">{tweet.text}</p>
+
+                  {/* エンゲージメント */}
+                  <div className="flex gap-4 text-xs text-gray-400">
+                    <span>💬 {tweet.publicMetrics.replyCount}</span>
+                    <span>🔁 {tweet.publicMetrics.retweetCount}</span>
+                    <span>❤️ {tweet.publicMetrics.likeCount}</span>
+                    {tweet.publicMetrics.quoteCount > 0 && (
+                      <span>💭 {tweet.publicMetrics.quoteCount}</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {!showAllTweets && tweets.length > 10 && (
+            <div className="mt-3 text-center text-sm text-gray-400">
+              残り {tweets.length - 10} 件のツイートがあります
+            </div>
+          )}
+        </div>
+      )}
+
       {/* 免責事項 */}
       <div className="text-xs text-gray-500 border-t border-gray-700 pt-4">
         <p>※ この予測はX（旧Twitter）の投稿から自動的に抽出されたセンチメント分析に基づいています。投資判断の際は、テクニカル指標やファンダメンタルズも併せてご検討ください。</p>
       </div>
     </div>
   );
+
+  // 時間経過を表示するヘルパー関数
+  function getTimeAgo(date: Date): string {
+    const now = new Date();
+    const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+    if (seconds < 60) return `${seconds}秒前`;
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}分前`;
+    if (seconds < 86400) return `${Math.floor(seconds / 3600)}時間前`;
+    return `${Math.floor(seconds / 86400)}日前`;
+  }
 }
