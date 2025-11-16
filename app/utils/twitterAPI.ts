@@ -24,9 +24,6 @@ export interface TwitterSearchResult {
   };
 }
 
-// X API v2のエンドポイント
-const TWITTER_API_BASE = 'https://api.twitter.com/2';
-
 // APIエラークラス
 export class TwitterAPIError extends Error {
   constructor(message: string, public statusCode?: number) {
@@ -36,18 +33,8 @@ export class TwitterAPIError extends Error {
 }
 
 /**
- * X APIのBearer Tokenを取得
- */
-function getTwitterBearerToken(): string {
-  const token = process.env.NEXT_PUBLIC_TWITTER_BEARER_TOKEN;
-  if (!token) {
-    throw new TwitterAPIError('X API Bearer Tokenが設定されていません。環境変数を確認してください。');
-  }
-  return token;
-}
-
-/**
  * 「暴落」キーワードで投稿を検索（日本語・英語両対応）
+ * Next.js API Routeを経由してTwitter APIを呼び出す（CORS回避）
  * @param symbol 株式シンボル（オプション）
  * @param maxResults 取得する最大ツイート数（デフォルト: 100）
  */
@@ -56,10 +43,7 @@ export async function searchCrashTweets(
   maxResults: number = 100
 ): Promise<TwitterSearchResult> {
   try {
-    const bearerToken = getTwitterBearerToken();
-
     // 検索クエリの構築
-    // 「暴落」または "crash" を含む投稿を検索
     let query = '(暴落 OR crash OR plunge OR plummet)';
 
     // シンボルが指定されている場合は追加
@@ -70,25 +54,17 @@ export async function searchCrashTweets(
     // リツイートを除外し、日本語または英語のツイートのみ
     query += ' -is:retweet (lang:ja OR lang:en)';
 
-    // URLエンコード
-    const encodedQuery = encodeURIComponent(query);
-
-    // APIリクエストのパラメータ
+    // Next.js API Routeを経由してリクエスト
     const params = new URLSearchParams({
-      query: encodedQuery,
-      max_results: Math.min(maxResults, 100).toString(), // APIの制限: 最大100
-      'tweet.fields': 'created_at,public_metrics,author_id',
-      'user.fields': 'username',
-      expansions: 'author_id'
+      query: query,
+      max_results: Math.min(maxResults, 100).toString()
     });
 
-    const url = `${TWITTER_API_BASE}/tweets/search/recent?${params.toString()}`;
+    const url = `/api/twitter/search?${params.toString()}`;
 
-    // APIリクエスト
     const response = await fetch(url, {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${bearerToken}`,
         'Content-Type': 'application/json'
       }
     });
@@ -96,7 +72,7 @@ export async function searchCrashTweets(
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       throw new TwitterAPIError(
-        `X API Error: ${response.status} ${response.statusText} - ${JSON.stringify(errorData)}`,
+        `Twitter API Error: ${response.status} - ${errorData.error || errorData.message || 'Unknown error'}`,
         response.status
       );
     }
@@ -147,7 +123,7 @@ export async function searchCrashTweets(
       throw error;
     }
     throw new TwitterAPIError(
-      `X APIリクエストエラー: ${error instanceof Error ? error.message : 'Unknown error'}`
+      `Twitter APIリクエストエラー: ${error instanceof Error ? error.message : 'Unknown error'}`
     );
   }
 }
@@ -257,8 +233,8 @@ export async function fetchCrashTweets(
   useRealData: boolean = true,
   maxResults: number = 100
 ): Promise<TwitterSearchResult> {
-  // デモモードまたはAPIキーがない場合
-  if (!useRealData || !process.env.NEXT_PUBLIC_TWITTER_BEARER_TOKEN) {
+  // デモモードの場合
+  if (!useRealData) {
     console.log('デモモードでサンプルツイートを使用中...');
     return generateSampleTweets(symbol);
   }
