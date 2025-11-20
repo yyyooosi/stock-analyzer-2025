@@ -90,8 +90,10 @@ bash /tmp/update_token.sh YOUR_NEW_BEARER_TOKEN
 
 `.env.local`ファイルを編集：
 ```bash
-NEXT_PUBLIC_TWITTER_BEARER_TOKEN=YOUR_NEW_BEARER_TOKEN_HERE
+TWITTER_BEARER_TOKEN=YOUR_NEW_BEARER_TOKEN_HERE
 ```
+
+**注意**: 以前は `NEXT_PUBLIC_TWITTER_BEARER_TOKEN` でしたが、セキュリティ向上のため `TWITTER_BEARER_TOKEN`（プレフィックスなし）に変更されました。
 
 ### ステップ6: テスト
 
@@ -121,7 +123,8 @@ bash /tmp/diagnose_x_api.sh
 
 2. **Vercelの環境変数を更新**:
    - https://vercel.com/yyoos-projects/stock-analyzer-2025-huzw/settings/environment-variables
-   - `NEXT_PUBLIC_TWITTER_BEARER_TOKEN` を新しい値に更新
+   - `TWITTER_BEARER_TOKEN` を新しい値に更新
+   - **注意**: 古い `NEXT_PUBLIC_TWITTER_BEARER_TOKEN` があれば削除してください
 
 3. **再デプロイ**（Gitにpushすれば自動デプロイ）
 
