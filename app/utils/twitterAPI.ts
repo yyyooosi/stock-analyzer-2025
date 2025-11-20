@@ -47,8 +47,9 @@ export async function searchCrashTweets(
     let query = '(暴落 OR crash OR plunge OR plummet)';
 
     // シンボルが指定されている場合は追加
+    // 注意: Free tierでは cashtag ($AAPL) 演算子が使えないため、通常の文字列検索のみ
     if (symbol) {
-      query += ` (${symbol} OR $${symbol})`;
+      query += ` ${symbol}`;
     }
 
     // リツイートを除外し、日本語または英語のツイートのみ
