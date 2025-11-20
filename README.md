@@ -1,36 +1,148 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 株価暴落予測アナライザー
 
-## Getting Started
+リアルタイムの株価データとソーシャルメディアのセンチメント分析を組み合わせた、株価暴落予測システムです。
 
-First, run the development server:
+## 機能
+
+- 📊 **リアルタイム株価データ取得** - Alpha Vantage APIを使用
+- 🐦 **Twitter/Xセンチメント分析** - 暴落関連ツイートの感情分析
+- 📈 **インタラクティブチャート** - Chart.jsによる視覚化
+- 🔄 **バックテスト機能** - 予測精度の検証
+- 🎨 **モダンUI** - Tailwind CSSによる洗練されたデザイン
+- 🔒 **セキュア** - APIキーはバックエンドで管理
+
+## 技術スタック
+
+- **フレームワーク**: Next.js 15.4.1 (App Router)
+- **言語**: TypeScript
+- **スタイリング**: Tailwind CSS
+- **チャート**: Chart.js 4.4.0 + react-chartjs-2
+- **デプロイ**: Vercel
+
+## セットアップ
+
+### 1. リポジトリのクローン
+
+```bash
+git clone https://github.com/your-username/stock-analyzer-2025.git
+cd stock-analyzer-2025
+```
+
+### 2. 依存関係のインストール
+
+```bash
+npm install
+```
+
+### 3. 環境変数の設定
+
+`.env.local`ファイルを作成し、APIキーを設定します：
+
+```bash
+cp .env.local.example .env.local
+```
+
+`.env.local`を編集：
+
+```bash
+# Alpha Vantage API Key (サーバーサイド専用)
+ALPHA_VANTAGE_API_KEY=your_alpha_vantage_api_key_here
+
+# Twitter API Bearer Token (サーバーサイド専用)
+TWITTER_BEARER_TOKEN=your_twitter_bearer_token_here
+```
+
+#### APIキーの取得方法
+
+- **Alpha Vantage**: https://www.alphavantage.co/support/#api-key
+- **Twitter API**: https://developer.twitter.com/en/portal/dashboard
+
+詳細は [ENVIRONMENT_VARIABLES.md](ENVIRONMENT_VARIABLES.md) を参照してください。
+
+### 4. 開発サーバーの起動
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+ブラウザで http://localhost:3000 を開いてアプリケーションを確認できます。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 使い方
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. **株式シンボルを入力** (例: AAPL, MSFT, TSLA)
+2. **「実データを使用」トグル**でリアルデータ/デモモードを切り替え
+3. **検索ボタン**をクリックして分析開始
+4. **暴落予測分析ボタン**でセンチメント分析を実行
 
-## Learn More
+## デモモード
 
-To learn more about Next.js, take a look at the following resources:
+APIキーが設定されていない場合、アプリケーションは自動的にデモモードで動作します：
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- サンプル株価データを生成
+- サンプルツイートを表示
+- すべての機能をテスト可能
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## プロジェクト構成
 
-## Deploy on Vercel
+```
+stock-analyzer-2025/
+├── app/
+│   ├── api/               # Next.js API Routes
+│   │   ├── stock/         # 株価データAPI
+│   │   └── twitter/       # Twitter検索API
+│   ├── components/        # Reactコンポーネント
+│   ├── utils/             # ユーティリティ関数
+│   └── page.tsx           # メインページ
+├── public/                # 静的ファイル
+├── .env.local.example     # 環境変数のテンプレート
+└── README.md
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## API エンドポイント
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### 株価データ
+
+- `GET /api/stock/quote?symbol=AAPL` - リアルタイム株価
+- `GET /api/stock/timeseries?symbol=AAPL` - 履歴データ
+
+### Twitter検索
+
+- `GET /api/twitter/search?query=crash&max_results=100` - ツイート検索
+
+## デプロイ
+
+### Vercelへのデプロイ
+
+1. GitHubにプッシュ
+2. Vercelでプロジェクトをインポート
+3. 環境変数を設定:
+   - `ALPHA_VANTAGE_API_KEY`
+   - `TWITTER_BEARER_TOKEN`
+4. デプロイ完了！
+
+詳細: https://vercel.com/docs
+
+## トラブルシューティング
+
+### Twitter API 401 Unauthorized
+
+Bearer Tokenが無効です。X Developer Portalで以下を確認：
+1. アプリがプロジェクト内にあるか
+2. Bearer Tokenを再生成
+3. 新しいトークンを環境変数に設定
+
+詳細は [X_API_修正手順.md](X_API_修正手順.md) を参照。
+
+### Alpha Vantage Rate Limit
+
+無料プランは1分間に5リクエストまでです。
+- 少し待ってから再試行
+- デモモードに切り替えてテスト
+
+## ライセンス
+
+MIT License
+
+## 作者
+
+Created with ❤️ using Next.js and Claude Code
