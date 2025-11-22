@@ -49,8 +49,8 @@ interface AlphaVantageTimeSeriesResponse {
   };
 }
 
-const API_KEY = process.env.NEXT_PUBLIC_ALPHA_VANTAGE_API_KEY;
-const BASE_URL = 'https://www.alphavantage.co/query';
+// バックエンドAPIのベースURL
+const BACKEND_API_BASE = '/api/stock';
 
 // APIレート制限管理
 class RateLimiter {
@@ -87,12 +87,8 @@ export class StockAPIError extends Error {
   }
 }
 
-// 実際の株価データを取得
+// 実際の株価データを取得（バックエンド経由）
 export async function fetchRealStockData(symbol: string): Promise<StockData> {
-  if (!API_KEY) {
-    throw new StockAPIError('APIキーが設定されていません。.env.localファイルでAPIキーを設定してください。');
-  }
-
   // レート制限チェック
   if (!rateLimiter.canMakeRequest()) {
     const waitTime = rateLimiter.getWaitTime();
@@ -101,13 +97,17 @@ export async function fetchRealStockData(symbol: string): Promise<StockData> {
 
   try {
     rateLimiter.recordRequest();
-    
+
     const response = await fetch(
-      `${BASE_URL}?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${API_KEY}`
+      `${BACKEND_API_BASE}/quote?symbol=${encodeURIComponent(symbol)}`
     );
 
     if (!response.ok) {
-      throw new StockAPIError(`HTTP Error: ${response.status} ${response.statusText}`);
+      const errorData = await response.json().catch(() => ({}));
+      throw new StockAPIError(
+        errorData.error || `HTTP Error: ${response.status} ${response.statusText}`,
+        String(response.status)
+      );
     }
 
     const data: AlphaVantageResponse = await response.json();
@@ -118,7 +118,7 @@ export async function fetchRealStockData(symbol: string): Promise<StockData> {
     }
 
     const quote = data['Global Quote'];
-    
+
     // データの解析と変換
     const price = parseFloat(quote['05. price']);
     const change = parseFloat(quote['09. change']);
@@ -141,12 +141,8 @@ export async function fetchRealStockData(symbol: string): Promise<StockData> {
   }
 }
 
-// 履歴データ（チャート用）を取得
+// 履歴データ（チャート用）を取得（バックエンド経由）
 export async function fetchRealChartData(symbol: string): Promise<ChartData[]> {
-  if (!API_KEY) {
-    throw new StockAPIError('APIキーが設定されていません。');
-  }
-
   // レート制限チェック
   if (!rateLimiter.canMakeRequest()) {
     const waitTime = rateLimiter.getWaitTime();
@@ -155,13 +151,17 @@ export async function fetchRealChartData(symbol: string): Promise<ChartData[]> {
 
   try {
     rateLimiter.recordRequest();
-    
+
     const response = await fetch(
-      `${BASE_URL}?function=TIME_SERIES_DAILY&symbol=${symbol}&outputsize=compact&apikey=${API_KEY}`
+      `${BACKEND_API_BASE}/timeseries?symbol=${encodeURIComponent(symbol)}`
     );
 
     if (!response.ok) {
-      throw new StockAPIError(`HTTP Error: ${response.status} ${response.statusText}`);
+      const errorData = await response.json().catch(() => ({}));
+      throw new StockAPIError(
+        errorData.error || `HTTP Error: ${response.status} ${response.statusText}`,
+        String(response.status)
+      );
     }
 
     const data: AlphaVantageTimeSeriesResponse = await response.json();
@@ -302,14 +302,14 @@ export function generateSampleData(symbol: string): { stock: StockData; chart: C
 
 // 統合データ取得関数（実データ → フォールバック → サンプルデータ）
 export async function fetchStockData(symbol: string, useRealData: boolean = true): Promise<{ stock: StockData; chart: ChartData[] }> {
-  if (!useRealData || !API_KEY) {
+  if (!useRealData) {
     console.log('デモモードでサンプルデータを使用中...');
     return generateSampleData(symbol);
   }
 
   try {
     console.log(`実データを取得中: ${symbol}`);
-    
+
     // 並行して株価データと履歴データを取得
     const [stockData, chartData] = await Promise.all([
       fetchRealStockData(symbol),
@@ -321,7 +321,7 @@ export async function fetchStockData(symbol: string, useRealData: boolean = true
 
   } catch (error) {
     console.warn('実データの取得に失敗、サンプルデータを使用:', error instanceof Error ? error.message : error);
-    
+
     // エラーが発生した場合はサンプルデータにフォールバック
     return generateSampleData(symbol);
   }

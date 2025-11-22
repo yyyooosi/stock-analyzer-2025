@@ -82,7 +82,22 @@ export function runBacktest(
     const indicators = calculateAllIndicators(historicalData);
     const latestIndicators = getLatestIndicators(indicators);
     const currentPrice = priceData[i].close;
-    const signalAnalysis = analyzeSignals(latestIndicators, currentPrice);
+
+    // シグナル分析用のデータ変換
+    const signalData = {
+      rsi: latestIndicators.rsi,
+      macd: latestIndicators.macd.macd,
+      macdSignal: latestIndicators.macd.signal,
+      macdHistogram: latestIndicators.macd.histogram,
+      sma5: latestIndicators.sma.sma5,
+      sma20: latestIndicators.sma.sma20,
+      sma50: latestIndicators.sma.sma50,
+      bollingerUpper: latestIndicators.bollingerBands.upper,
+      bollingerLower: latestIndicators.bollingerBands.lower,
+      bollingerMiddle: latestIndicators.bollingerBands.middle
+    };
+
+    const signalAnalysis = analyzeSignals(currentPrice, signalData);
     
     // ポートフォリオ価値の記録
     const currentValue = currentPosition === 'LONG' 
@@ -148,8 +163,7 @@ export function runBacktest(
     
     // 新しいシグナルに基づく取引判定
     if (signalAnalysis.confidence >= 60) { // 信頼度60%以上でのみ取引（調整）
-      if ((signalAnalysis.signal === 'STRONG_BUY' || signalAnalysis.signal === 'BUY') && 
-          currentPosition === 'NONE') {
+      if (signalAnalysis.signal === 'BUY' && currentPosition === 'NONE') {
         // 買いシグナル
         const investmentAmount = currentCapital * config.riskPerTrade;
         const commission = investmentAmount * config.commissionRate;
@@ -173,8 +187,7 @@ export function runBacktest(
             value: totalCost
           });
         }
-      } else if ((signalAnalysis.signal === 'STRONG_SELL' || signalAnalysis.signal === 'SELL') && 
-                 currentPosition === 'LONG') {
+      } else if (signalAnalysis.signal === 'SELL' && currentPosition === 'LONG') {
         // 売りシグナル
         const commission = currentShares * currentPrice * config.commissionRate;
         currentCapital = currentShares * currentPrice - commission;

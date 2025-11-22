@@ -103,10 +103,10 @@ export const StockChart: React.FC<StockChartProps> = ({ data, symbol }) => {
         borderColor: 'rgb(75, 85, 99)', // border-gray-600
         borderWidth: 1,
         callbacks: {
-          label: function(context) {
+          label: function(context: any) {
             const label = context.dataset.label || '';
             const value = context.parsed.y;
-            return `${label}: $${value.toFixed(2)}`;
+            return `${label}: $${value ? value.toFixed(2) : 'N/A'}`;
           }
         }
       }
