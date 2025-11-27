@@ -1,12 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { fetchStockData } from './utils/stockAPI';
 import { calculateAllIndicators, getLatestIndicators } from './utils/technicalIndicators';
 import { analyzeSignals, SignalAnalysis } from './utils/signalAnalysis';
 import { runBacktest } from './utils/backtest';
 import { fetchCrashTweets, Tweet } from './utils/twitterAPI';
 import { predictCrash, CrashPrediction, integrateWithTechnicalAnalysis } from './utils/crashPrediction';
+import { addToWatchlist, removeFromWatchlist, isInWatchlist } from './utils/watchlist';
 import { StockChart } from './components/StockChart';
 import { TechnicalIndicators } from './components/TechnicalIndicators';
 import { BuySignal } from './components/BuySignal';
@@ -30,7 +32,8 @@ interface ChartData {
   volume: number;
 }
 
-export default function Home() {
+function HomeContent() {
+  const searchParams = useSearchParams();
   const [stockData, setStockData] = useState<StockData | null>(null);
   const [chartData, setChartData] = useState<ChartData[]>([]);
   const [technicalIndicators, setTechnicalIndicators] = useState<ReturnType<typeof getLatestIndicators> | null>(null);
@@ -45,8 +48,16 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [useRealData, setUseRealData] = useState(true);
   const [dataSource, setDataSource] = useState<'real' | 'demo'>('real');
+  const [inWatchlist, setInWatchlist] = useState(false);
 
-  const handleSearch = async () => {
+  // 現在の銘柄がウォッチリストに入っているか確認
+  useEffect(() => {
+    if (stockData) {
+      setInWatchlist(isInWatchlist(stockData.symbol));
+    }
+  }, [stockData]);
+
+  const handleSearch = useCallback(async () => {
     if (!symbol.trim()) return;
 
     setLoading(true);
@@ -89,7 +100,23 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [symbol, useRealData]);
+
+  // クエリパラメータから銘柄を取得して自動検索
+  useEffect(() => {
+    const symbolParam = searchParams.get('symbol');
+    if (symbolParam) {
+      setSymbol(symbolParam.toUpperCase());
+    }
+  }, [searchParams]);
+
+  // symbolが設定されたら自動検索
+  useEffect(() => {
+    const symbolParam = searchParams.get('symbol');
+    if (symbolParam && symbol === symbolParam.toUpperCase()) {
+      handleSearch();
+    }
+  }, [symbol, searchParams, handleSearch]);
 
   const handleCrashAnalysis = async () => {
     if (!symbol.trim()) return;
@@ -124,7 +151,7 @@ export default function Home() {
     if (!chartData.length || !technicalIndicators) return;
 
     setIsBacktesting(true);
-    
+
     // バックテストは計算量が多いため、少し遅延を入れてUIの応答性を保つ
     setTimeout(() => {
       try {
@@ -144,6 +171,22 @@ export default function Home() {
         setIsBacktesting(false);
       }
     }, 100);
+  };
+
+  const handleToggleWatchlist = () => {
+    if (!stockData) return;
+
+    if (inWatchlist) {
+      const removed = removeFromWatchlist(stockData.symbol);
+      if (removed) {
+        setInWatchlist(false);
+      }
+    } else {
+      const added = addToWatchlist(stockData.symbol);
+      if (added) {
+        setInWatchlist(true);
+      }
+    }
   };
 
   const toggleDataSource = () => {
@@ -230,7 +273,20 @@ export default function Home() {
             {/* 株価情報 */}
             <div className="bg-gray-800 rounded-lg p-6">
               <div className="flex justify-between items-center mb-4">
-                <h2 className="text-2xl font-bold">{stockData.symbol}</h2>
+                <div className="flex items-center gap-4">
+                  <h2 className="text-2xl font-bold">{stockData.symbol}</h2>
+                  <button
+                    onClick={handleToggleWatchlist}
+                    className={`px-4 py-2 rounded-lg transition-colors ${
+                      inWatchlist
+                        ? 'bg-yellow-600 hover:bg-yellow-700'
+                        : 'bg-gray-700 hover:bg-gray-600'
+                    }`}
+                    title={inWatchlist ? 'ウォッチリストから削除' : 'ウォッチリストに追加'}
+                  >
+                    {inWatchlist ? '★ ウォッチリスト登録済み' : '☆ ウォッチリストに追加'}
+                  </button>
+                </div>
                 <span className="text-sm text-gray-400">{new Date(stockData.timestamp).toLocaleString('ja-JP')}</span>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -431,5 +487,19 @@ export default function Home() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-xl">読み込み中...</p>
+        </div>
+      </div>
+    }>
+      <HomeContent />
+    </Suspense>
   );
 }
