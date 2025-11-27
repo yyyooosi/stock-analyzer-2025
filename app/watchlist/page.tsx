@@ -29,7 +29,6 @@ export default function WatchlistPage() {
   const [dataSource, setDataSource] = useState<'real' | 'demo'>('real');
   const [sortBy, setSortBy] = useState<'symbol' | 'change' | 'changePercent' | 'signal'>('symbol');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
-  const [expandedSymbols, setExpandedSymbols] = useState<Set<string>>(new Set());
 
   // ウォッチリストを読み込み
   useEffect(() => {
@@ -170,18 +169,6 @@ export default function WatchlistPage() {
     }
   };
 
-  const toggleExpand = (symbol: string) => {
-    setExpandedSymbols(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(symbol)) {
-        newSet.delete(symbol);
-      } else {
-        newSet.add(symbol);
-      }
-      return newSet;
-    });
-  };
-
   const getSortedWatchlist = () => {
     return [...watchlist].sort((a, b) => {
       const quoteA = stockQuotes.get(a.symbol);
@@ -312,20 +299,12 @@ export default function WatchlistPage() {
             <div className="divide-y divide-gray-700">
               {sortedWatchlist.map((item) => {
                 const quote = stockQuotes.get(item.symbol);
-                const isExpanded = expandedSymbols.has(item.symbol);
 
                 return (
                   <div key={item.symbol}>
                     {/* メイン行 */}
                     <div className="grid grid-cols-12 gap-4 px-6 py-4 hover:bg-gray-750 transition-colors items-center">
                       <div className="col-span-2 flex items-center gap-2">
-                        <button
-                          onClick={() => toggleExpand(item.symbol)}
-                          className="text-gray-400 hover:text-white transition-colors"
-                          title={isExpanded ? '詳細を閉じる' : '詳細を表示'}
-                        >
-                          {isExpanded ? '▼' : '▶'}
-                        </button>
                         <button
                           onClick={() => handleSymbolClick(item.symbol)}
                           className="text-blue-400 hover:text-blue-300 font-semibold text-lg"
@@ -400,8 +379,8 @@ export default function WatchlistPage() {
                       </div>
                     </div>
 
-                    {/* 展開可能な詳細ビュー */}
-                    {isExpanded && quote?.technicalIndicators && quote?.signalAnalysis && (
+                    {/* 詳細ビュー */}
+                    {quote?.technicalIndicators && quote?.signalAnalysis && (
                       <div className="px-6 py-4 bg-gray-900/50 border-t border-gray-700">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                           {/* テクニカル指標 */}
