@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { getWatchlist, addToWatchlist, removeFromWatchlist, WatchlistItem } from '../utils/watchlist';
 import { fetchStockData } from '../utils/stockAPI';
+import { calculateAllIndicators, getLatestIndicators } from '../utils/technicalIndicators';
+import { analyzeSignals, SignalAnalysis } from '../utils/signalAnalysis';
 
 interface StockQuote {
   symbol: string;
@@ -12,6 +14,8 @@ interface StockQuote {
   changePercent: number;
   isLoading: boolean;
   error?: string;
+  technicalIndicators?: ReturnType<typeof getLatestIndicators>;
+  signalAnalysis?: SignalAnalysis;
 }
 
 export default function WatchlistPage() {
@@ -23,8 +27,9 @@ export default function WatchlistPage() {
   const [addError, setAddError] = useState<string | null>(null);
   const [useRealData, setUseRealData] = useState(true);
   const [dataSource, setDataSource] = useState<'real' | 'demo'>('real');
-  const [sortBy, setSortBy] = useState<'symbol' | 'change' | 'changePercent'>('symbol');
+  const [sortBy, setSortBy] = useState<'symbol' | 'change' | 'changePercent' | 'signal'>('symbol');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [expandedSymbols, setExpandedSymbols] = useState<Set<string>>(new Set());
 
   // ウォッチリストを読み込み
   useEffect(() => {
@@ -52,13 +57,37 @@ export default function WatchlistPage() {
         }));
 
         try {
-          const { stock } = await fetchStockData(item.symbol, useRealData);
+          const { stock, chart } = await fetchStockData(item.symbol, useRealData);
+
+          // テクニカル指標を計算
+          const indicators = calculateAllIndicators(chart);
+          const latestIndicators = getLatestIndicators(indicators);
+
+          // シグナル分析用のデータ変換
+          const signalData = {
+            rsi: latestIndicators.rsi,
+            macd: latestIndicators.macd.macd,
+            macdSignal: latestIndicators.macd.signal,
+            macdHistogram: latestIndicators.macd.histogram,
+            sma5: latestIndicators.sma.sma5,
+            sma20: latestIndicators.sma.sma20,
+            sma50: latestIndicators.sma.sma50,
+            bollingerUpper: latestIndicators.bollingerBands.upper,
+            bollingerLower: latestIndicators.bollingerBands.lower,
+            bollingerMiddle: latestIndicators.bollingerBands.middle
+          };
+
+          // シグナル分析の実行
+          const signals = analyzeSignals(stock.price, signalData);
+
           setStockQuotes(prev => new Map(prev).set(item.symbol, {
             symbol: stock.symbol,
             price: stock.price,
             change: stock.change,
             changePercent: stock.changePercent,
-            isLoading: false
+            isLoading: false,
+            technicalIndicators: latestIndicators,
+            signalAnalysis: signals
           }));
         } catch (error) {
           console.error(`${item.symbol}の取得に失敗:`, error);
@@ -132,13 +161,25 @@ export default function WatchlistPage() {
     setStockQuotes(new Map());
   };
 
-  const handleSort = (field: 'symbol' | 'change' | 'changePercent') => {
+  const handleSort = (field: 'symbol' | 'change' | 'changePercent' | 'signal') => {
     if (sortBy === field) {
       setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
     } else {
       setSortBy(field);
       setSortOrder('asc');
     }
+  };
+
+  const toggleExpand = (symbol: string) => {
+    setExpandedSymbols(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(symbol)) {
+        newSet.delete(symbol);
+      } else {
+        newSet.add(symbol);
+      }
+      return newSet;
+    });
   };
 
   const getSortedWatchlist = () => {
@@ -154,6 +195,8 @@ export default function WatchlistPage() {
         compareValue = quoteA.change - quoteB.change;
       } else if (sortBy === 'changePercent' && quoteA && quoteB) {
         compareValue = quoteA.changePercent - quoteB.changePercent;
+      } else if (sortBy === 'signal' && quoteA?.signalAnalysis && quoteB?.signalAnalysis) {
+        compareValue = quoteA.signalAnalysis.overallScore - quoteB.signalAnalysis.overallScore;
       }
 
       return sortOrder === 'asc' ? compareValue : -compareValue;
@@ -161,6 +204,18 @@ export default function WatchlistPage() {
   };
 
   const sortedWatchlist = getSortedWatchlist();
+
+  const getSignalColor = (score: number) => {
+    if (score >= 60) return 'text-green-400 bg-green-900/30';
+    if (score >= 40) return 'text-yellow-400 bg-yellow-900/30';
+    return 'text-red-400 bg-red-900/30';
+  };
+
+  const getSignalLabel = (score: number) => {
+    if (score >= 60) return '買い推奨';
+    if (score >= 40) return '様子見';
+    return '買い控え';
+  };
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
@@ -224,7 +279,7 @@ export default function WatchlistPage() {
           <div className="bg-gray-800 rounded-lg overflow-hidden">
             {/* テーブルヘッダー */}
             <div className="grid grid-cols-12 gap-4 px-6 py-4 bg-gray-700 font-semibold text-sm">
-              <div className="col-span-3 flex items-center gap-2 cursor-pointer" onClick={() => handleSort('symbol')}>
+              <div className="col-span-2 flex items-center gap-2 cursor-pointer" onClick={() => handleSort('symbol')}>
                 <span>銘柄</span>
                 {sortBy === 'symbol' && (
                   <span className="text-blue-400">{sortOrder === 'asc' ? '↑' : '↓'}</span>
@@ -243,7 +298,13 @@ export default function WatchlistPage() {
                   <span className="text-blue-400">{sortOrder === 'asc' ? '↑' : '↓'}</span>
                 )}
               </div>
-              <div className="col-span-2 text-center">追加日時</div>
+              <div className="col-span-2 text-center flex items-center justify-center gap-2 cursor-pointer" onClick={() => handleSort('signal')}>
+                <span>シグナル</span>
+                {sortBy === 'signal' && (
+                  <span className="text-blue-400">{sortOrder === 'asc' ? '↑' : '↓'}</span>
+                )}
+              </div>
+              <div className="col-span-1 text-center">追加日</div>
               <div className="col-span-1 text-center">操作</div>
             </div>
 
@@ -251,69 +312,207 @@ export default function WatchlistPage() {
             <div className="divide-y divide-gray-700">
               {sortedWatchlist.map((item) => {
                 const quote = stockQuotes.get(item.symbol);
+                const isExpanded = expandedSymbols.has(item.symbol);
 
                 return (
-                  <div
-                    key={item.symbol}
-                    className="grid grid-cols-12 gap-4 px-6 py-4 hover:bg-gray-750 transition-colors items-center"
-                  >
-                    <div className="col-span-3">
-                      <button
-                        onClick={() => handleSymbolClick(item.symbol)}
-                        className="text-blue-400 hover:text-blue-300 font-semibold text-lg"
-                      >
-                        {item.symbol}
-                      </button>
+                  <div key={item.symbol}>
+                    {/* メイン行 */}
+                    <div className="grid grid-cols-12 gap-4 px-6 py-4 hover:bg-gray-750 transition-colors items-center">
+                      <div className="col-span-2 flex items-center gap-2">
+                        <button
+                          onClick={() => toggleExpand(item.symbol)}
+                          className="text-gray-400 hover:text-white transition-colors"
+                          title={isExpanded ? '詳細を閉じる' : '詳細を表示'}
+                        >
+                          {isExpanded ? '▼' : '▶'}
+                        </button>
+                        <button
+                          onClick={() => handleSymbolClick(item.symbol)}
+                          className="text-blue-400 hover:text-blue-300 font-semibold text-lg"
+                        >
+                          {item.symbol}
+                        </button>
+                      </div>
+                      <div className="col-span-2 text-right">
+                        {quote?.isLoading ? (
+                          <span className="text-gray-500">読込中...</span>
+                        ) : quote?.error ? (
+                          <span className="text-red-400 text-xs">エラー</span>
+                        ) : quote ? (
+                          <span className="font-semibold">${quote.price.toFixed(2)}</span>
+                        ) : (
+                          <span className="text-gray-500">-</span>
+                        )}
+                      </div>
+                      <div className="col-span-2 text-right">
+                        {quote?.isLoading ? (
+                          <span className="text-gray-500">-</span>
+                        ) : quote?.error ? (
+                          <span className="text-gray-500">-</span>
+                        ) : quote ? (
+                          <span className={quote.change >= 0 ? 'text-green-400' : 'text-red-400'}>
+                            {quote.change >= 0 ? '+' : ''}${quote.change.toFixed(2)}
+                          </span>
+                        ) : (
+                          <span className="text-gray-500">-</span>
+                        )}
+                      </div>
+                      <div className="col-span-2 text-right">
+                        {quote?.isLoading ? (
+                          <span className="text-gray-500">-</span>
+                        ) : quote?.error ? (
+                          <span className="text-gray-500">-</span>
+                        ) : quote ? (
+                          <span className={`font-semibold ${quote.changePercent >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                            {quote.changePercent >= 0 ? '+' : ''}{quote.changePercent.toFixed(2)}%
+                          </span>
+                        ) : (
+                          <span className="text-gray-500">-</span>
+                        )}
+                      </div>
+                      <div className="col-span-2 text-center">
+                        {quote?.isLoading ? (
+                          <span className="text-gray-500 text-xs">分析中...</span>
+                        ) : quote?.signalAnalysis ? (
+                          <div className="flex flex-col items-center gap-1">
+                            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getSignalColor(quote.signalAnalysis.overallScore)}`}>
+                              {getSignalLabel(quote.signalAnalysis.overallScore)}
+                            </span>
+                            <span className="text-xs text-gray-400">
+                              {quote.signalAnalysis.overallScore}/100
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-gray-500 text-xs">-</span>
+                        )}
+                      </div>
+                      <div className="col-span-1 text-center text-xs text-gray-400">
+                        {new Date(item.addedAt).toLocaleDateString('ja-JP', { month: 'short', day: 'numeric' })}
+                      </div>
+                      <div className="col-span-1 text-center">
+                        <button
+                          onClick={() => handleRemoveSymbol(item.symbol)}
+                          className="text-red-400 hover:text-red-300 transition-colors"
+                          title="削除"
+                        >
+                          ✕
+                        </button>
+                      </div>
                     </div>
-                    <div className="col-span-2 text-right">
-                      {quote?.isLoading ? (
-                        <span className="text-gray-500">読込中...</span>
-                      ) : quote?.error ? (
-                        <span className="text-red-400 text-xs">エラー</span>
-                      ) : quote ? (
-                        <span className="font-semibold">${quote.price.toFixed(2)}</span>
-                      ) : (
-                        <span className="text-gray-500">-</span>
-                      )}
-                    </div>
-                    <div className="col-span-2 text-right">
-                      {quote?.isLoading ? (
-                        <span className="text-gray-500">-</span>
-                      ) : quote?.error ? (
-                        <span className="text-gray-500">-</span>
-                      ) : quote ? (
-                        <span className={quote.change >= 0 ? 'text-green-400' : 'text-red-400'}>
-                          {quote.change >= 0 ? '+' : ''}${quote.change.toFixed(2)}
-                        </span>
-                      ) : (
-                        <span className="text-gray-500">-</span>
-                      )}
-                    </div>
-                    <div className="col-span-2 text-right">
-                      {quote?.isLoading ? (
-                        <span className="text-gray-500">-</span>
-                      ) : quote?.error ? (
-                        <span className="text-gray-500">-</span>
-                      ) : quote ? (
-                        <span className={`font-semibold ${quote.changePercent >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                          {quote.changePercent >= 0 ? '+' : ''}{quote.changePercent.toFixed(2)}%
-                        </span>
-                      ) : (
-                        <span className="text-gray-500">-</span>
-                      )}
-                    </div>
-                    <div className="col-span-2 text-center text-sm text-gray-400">
-                      {new Date(item.addedAt).toLocaleDateString('ja-JP')}
-                    </div>
-                    <div className="col-span-1 text-center">
-                      <button
-                        onClick={() => handleRemoveSymbol(item.symbol)}
-                        className="text-red-400 hover:text-red-300 transition-colors"
-                        title="削除"
-                      >
-                        ✕
-                      </button>
-                    </div>
+
+                    {/* 展開可能な詳細ビュー */}
+                    {isExpanded && quote?.technicalIndicators && quote?.signalAnalysis && (
+                      <div className="px-6 py-4 bg-gray-900/50 border-t border-gray-700">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          {/* テクニカル指標 */}
+                          <div>
+                            <h4 className="text-sm font-semibold text-gray-300 mb-3">テクニカル指標</h4>
+                            <div className="space-y-2 text-sm">
+                              <div className="flex justify-between">
+                                <span className="text-gray-400">RSI:</span>
+                                <span className={`font-semibold ${
+                                  quote.technicalIndicators.rsi !== null && quote.technicalIndicators.rsi > 70 ? 'text-red-400' :
+                                  quote.technicalIndicators.rsi !== null && quote.technicalIndicators.rsi < 30 ? 'text-green-400' :
+                                  'text-yellow-400'
+                                }`}>
+                                  {quote.technicalIndicators.rsi !== null ? quote.technicalIndicators.rsi.toFixed(2) : '-'}
+                                </span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-400">MACD:</span>
+                                <span className="font-semibold text-white">
+                                  {quote.technicalIndicators.macd.macd !== null ? quote.technicalIndicators.macd.macd.toFixed(2) : '-'}
+                                </span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-400">SMA 5日:</span>
+                                <span className="font-semibold text-white">
+                                  {quote.technicalIndicators.sma.sma5 !== null ? `$${quote.technicalIndicators.sma.sma5.toFixed(2)}` : '-'}
+                                </span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-400">SMA 20日:</span>
+                                <span className="font-semibold text-white">
+                                  {quote.technicalIndicators.sma.sma20 !== null ? `$${quote.technicalIndicators.sma.sma20.toFixed(2)}` : '-'}
+                                </span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-400">SMA 50日:</span>
+                                <span className="font-semibold text-white">
+                                  {quote.technicalIndicators.sma.sma50 !== null ? `$${quote.technicalIndicators.sma.sma50.toFixed(2)}` : '-'}
+                                </span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-400">ボリンジャー上限:</span>
+                                <span className="font-semibold text-white">
+                                  {quote.technicalIndicators.bollingerBands.upper !== null ? `$${quote.technicalIndicators.bollingerBands.upper.toFixed(2)}` : '-'}
+                                </span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-400">ボリンジャー下限:</span>
+                                <span className="font-semibold text-white">
+                                  {quote.technicalIndicators.bollingerBands.lower !== null ? `$${quote.technicalIndicators.bollingerBands.lower.toFixed(2)}` : '-'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* シグナル分析 */}
+                          <div>
+                            <h4 className="text-sm font-semibold text-gray-300 mb-3">シグナル分析</h4>
+                            <div className="space-y-3">
+                              <div>
+                                <div className="flex justify-between mb-1">
+                                  <span className="text-gray-400 text-sm">総合スコア</span>
+                                  <span className="font-semibold text-white">
+                                    {quote.signalAnalysis.overallScore}/100
+                                  </span>
+                                </div>
+                                <div className="bg-gray-700 rounded-full h-2">
+                                  <div
+                                    className={`h-2 rounded-full transition-all ${
+                                      quote.signalAnalysis.overallScore >= 60 ? 'bg-green-400' :
+                                      quote.signalAnalysis.overallScore >= 40 ? 'bg-yellow-400' :
+                                      'bg-red-400'
+                                    }`}
+                                    style={{ width: `${quote.signalAnalysis.overallScore}%` }}
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="space-y-2 text-sm">
+                                {Object.entries(quote.signalAnalysis.signals).map(([key, signal]) => (
+                                  <div key={key} className="flex items-start justify-between gap-2">
+                                    <span className="text-gray-400 capitalize">{
+                                      key === 'movingAverage' ? '移動平均' :
+                                      key === 'bollingerBands' ? 'ボリンジャー' :
+                                      key.toUpperCase()
+                                    }:</span>
+                                    <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                                      signal.score > 10 ? 'bg-green-900/50 text-green-400' :
+                                      signal.score < -10 ? 'bg-red-900/50 text-red-400' :
+                                      'bg-yellow-900/50 text-yellow-400'
+                                    }`}>
+                                      {signal.score > 10 ? '買い' :
+                                       signal.score < -10 ? '売り' : '中立'}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+
+                              <div className="mt-4 pt-3 border-t border-gray-700">
+                                <p className="text-xs text-gray-400">
+                                  <span className="font-semibold">{quote.signalAnalysis.recommendation}</span>
+                                </p>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  信頼度: {quote.signalAnalysis.confidence}%
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
