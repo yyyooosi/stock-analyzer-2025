@@ -3,17 +3,29 @@ import Google from "next-auth/providers/google";
 import GitHub from "next-auth/providers/github";
 import type { NextAuthConfig } from "next-auth";
 
-export const config = {
-  providers: [
+// 認証プロバイダーの設定（環境変数がある場合のみ）
+const providers = [];
+
+if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+  providers.push(
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    }),
+    })
+  );
+}
+
+if (process.env.GITHUB_ID && process.env.GITHUB_SECRET) {
+  providers.push(
     GitHub({
       clientId: process.env.GITHUB_ID,
       clientSecret: process.env.GITHUB_SECRET,
-    }),
-  ],
+    })
+  );
+}
+
+export const config = {
+  providers,
   pages: {
     signIn: '/auth/signin',
   },
