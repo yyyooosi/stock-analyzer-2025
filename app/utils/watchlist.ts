@@ -9,7 +9,84 @@ export interface WatchlistData {
 
 const WATCHLIST_KEY = 'stock-analyzer-watchlist';
 
-// ウォッチリストを取得
+// ========================================
+// サーバーAPI経由のウォッチリスト操作
+// ========================================
+
+// サーバーからウォッチリストを取得
+export async function getWatchlistFromServer(): Promise<WatchlistItem[]> {
+  try {
+    const response = await fetch('/api/watchlist');
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        // 未認証の場合はlocalStorageを使用
+        return getWatchlist();
+      }
+      throw new Error('ウォッチリストの取得に失敗しました');
+    }
+
+    const data: WatchlistData = await response.json();
+    return data.items || [];
+  } catch (error) {
+    console.error('サーバーからのウォッチリスト取得に失敗:', error);
+    return getWatchlist(); // フォールバック
+  }
+}
+
+// サーバーにウォッチリスト項目を追加
+export async function addToWatchlistServer(symbol: string): Promise<boolean> {
+  try {
+    const response = await fetch('/api/watchlist', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ symbol: symbol.toUpperCase() }),
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        // 未認証の場合はlocalStorageを使用
+        return addToWatchlist(symbol);
+      }
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error('サーバーへのウォッチリスト追加に失敗:', error);
+    return addToWatchlist(symbol); // フォールバック
+  }
+}
+
+// サーバーからウォッチリスト項目を削除
+export async function removeFromWatchlistServer(symbol: string): Promise<boolean> {
+  try {
+    const response = await fetch(`/api/watchlist?symbol=${encodeURIComponent(symbol.toUpperCase())}`, {
+      method: 'DELETE',
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        // 未認証の場合はlocalStorageを使用
+        return removeFromWatchlist(symbol);
+      }
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error('サーバーからのウォッチリスト削除に失敗:', error);
+    return removeFromWatchlist(symbol); // フォールバック
+  }
+}
+
+// ========================================
+// LocalStorage経由のウォッチリスト操作
+// ========================================
+
+// ウォッチリストを取得（localStorage）
 export function getWatchlist(): WatchlistItem[] {
   if (typeof window === 'undefined') return [];
 

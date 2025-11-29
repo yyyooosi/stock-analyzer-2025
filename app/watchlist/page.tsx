@@ -2,7 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { getWatchlist, addToWatchlist, removeFromWatchlist, WatchlistItem } from '../utils/watchlist';
+import {
+  getWatchlistFromServer,
+  addToWatchlistServer,
+  removeFromWatchlistServer,
+  WatchlistItem
+} from '../utils/watchlist';
 import { fetchStockData } from '../utils/stockAPI';
 import { calculateAllIndicators, getLatestIndicators } from '../utils/technicalIndicators';
 import { analyzeSignals, SignalAnalysis } from '../utils/signalAnalysis';
@@ -32,8 +37,11 @@ export default function WatchlistPage() {
 
   // ウォッチリストを読み込み
   useEffect(() => {
-    const items = getWatchlist();
-    setWatchlist(items);
+    const loadWatchlist = async () => {
+      const items = await getWatchlistFromServer();
+      setWatchlist(items);
+    };
+    loadWatchlist();
   }, []);
 
   // 各銘柄の株価を取得
@@ -118,10 +126,10 @@ export default function WatchlistPage() {
       // まず株価データを取得して、有効な銘柄か確認
       await fetchStockData(newSymbol.trim(), useRealData);
 
-      // ウォッチリストに追加
-      const added = addToWatchlist(newSymbol.trim());
+      // ウォッチリストに追加（サーバーAPI使用）
+      const added = await addToWatchlistServer(newSymbol.trim());
       if (added) {
-        const items = getWatchlist();
+        const items = await getWatchlistFromServer();
         setWatchlist(items);
         setNewSymbol('');
       } else {
@@ -134,10 +142,10 @@ export default function WatchlistPage() {
     }
   };
 
-  const handleRemoveSymbol = (symbol: string) => {
-    const removed = removeFromWatchlist(symbol);
+  const handleRemoveSymbol = async (symbol: string) => {
+    const removed = await removeFromWatchlistServer(symbol);
     if (removed) {
-      const items = getWatchlist();
+      const items = await getWatchlistFromServer();
       setWatchlist(items);
       setStockQuotes(prev => {
         const newMap = new Map(prev);

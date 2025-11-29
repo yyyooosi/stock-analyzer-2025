@@ -8,7 +8,7 @@ import { analyzeSignals, SignalAnalysis } from './utils/signalAnalysis';
 import { runBacktest } from './utils/backtest';
 import { fetchCrashTweets, Tweet } from './utils/twitterAPI';
 import { predictCrash, CrashPrediction, integrateWithTechnicalAnalysis } from './utils/crashPrediction';
-import { addToWatchlist, removeFromWatchlist, isInWatchlist } from './utils/watchlist';
+import { addToWatchlistServer, removeFromWatchlistServer, isInWatchlist, getWatchlistFromServer } from './utils/watchlist';
 import { StockChart } from './components/StockChart';
 import { TechnicalIndicators } from './components/TechnicalIndicators';
 import { BuySignal } from './components/BuySignal';
@@ -52,9 +52,14 @@ function HomeContent() {
 
   // 現在の銘柄がウォッチリストに入っているか確認
   useEffect(() => {
-    if (stockData) {
-      setInWatchlist(isInWatchlist(stockData.symbol));
-    }
+    const checkWatchlist = async () => {
+      if (stockData) {
+        const watchlist = await getWatchlistFromServer();
+        const inList = watchlist.some(item => item.symbol.toUpperCase() === stockData.symbol.toUpperCase());
+        setInWatchlist(inList);
+      }
+    };
+    checkWatchlist();
   }, [stockData]);
 
   const handleSearch = useCallback(async () => {
@@ -173,16 +178,16 @@ function HomeContent() {
     }, 100);
   };
 
-  const handleToggleWatchlist = () => {
+  const handleToggleWatchlist = async () => {
     if (!stockData) return;
 
     if (inWatchlist) {
-      const removed = removeFromWatchlist(stockData.symbol);
+      const removed = await removeFromWatchlistServer(stockData.symbol);
       if (removed) {
         setInWatchlist(false);
       }
     } else {
-      const added = addToWatchlist(stockData.symbol);
+      const added = await addToWatchlistServer(stockData.symbol);
       if (added) {
         setInWatchlist(true);
       }

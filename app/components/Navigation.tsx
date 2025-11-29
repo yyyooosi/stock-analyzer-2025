@@ -1,14 +1,8 @@
-'use client';
-
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { auth, signOut } from '@/auth';
 
-export default function Navigation() {
-  const pathname = usePathname();
-
-  const isActive = (path: string) => {
-    return pathname === path;
-  };
+export default async function Navigation() {
+  const session = await auth();
 
   return (
     <nav className="bg-gray-800 border-b border-gray-700">
@@ -21,25 +15,56 @@ export default function Navigation() {
             <div className="flex space-x-4">
               <Link
                 href="/"
-                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                  isActive('/')
-                    ? 'bg-gray-900 text-white'
-                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-                }`}
+                className="px-3 py-2 rounded-md text-sm font-medium transition-colors text-gray-300 hover:bg-gray-700 hover:text-white"
               >
                 ホーム
               </Link>
               <Link
                 href="/watchlist"
-                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                  isActive('/watchlist')
-                    ? 'bg-gray-900 text-white'
-                    : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-                }`}
+                className="px-3 py-2 rounded-md text-sm font-medium transition-colors text-gray-300 hover:bg-gray-700 hover:text-white"
               >
                 マイウォッチリスト
               </Link>
             </div>
+          </div>
+
+          <div className="flex items-center gap-4">
+            {session?.user ? (
+              <>
+                <div className="flex items-center gap-3">
+                  {session.user.image && (
+                    <img
+                      src={session.user.image}
+                      alt={session.user.name || 'User'}
+                      className="w-8 h-8 rounded-full"
+                    />
+                  )}
+                  <span className="text-gray-300 text-sm">
+                    {session.user.name || session.user.email}
+                  </span>
+                </div>
+                <form
+                  action={async () => {
+                    'use server';
+                    await signOut({ redirectTo: '/' });
+                  }}
+                >
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-md text-sm font-medium transition-colors"
+                  >
+                    ログアウト
+                  </button>
+                </form>
+              </>
+            ) : (
+              <Link
+                href="/auth/signin"
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium transition-colors"
+              >
+                ログイン
+              </Link>
+            )}
           </div>
         </div>
       </div>
