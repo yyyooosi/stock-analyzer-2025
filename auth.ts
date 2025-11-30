@@ -26,6 +26,7 @@ if (process.env.GITHUB_ID && process.env.GITHUB_SECRET) {
 
 export const config = {
   providers,
+  trustHost: true, // Vercelデプロイ時に必須
   pages: {
     signIn: '/auth/signin',
   },
