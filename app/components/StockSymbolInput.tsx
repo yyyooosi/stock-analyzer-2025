@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { StockSymbol } from '../utils/stockSymbols';
+import { StockSymbol, searchSymbols } from '../utils/stockSymbols';
 
 interface StockSymbolInputProps {
   value: string;
@@ -26,21 +26,16 @@ export function StockSymbolInput({
 
   // 入力値の変更時に候補を取得（ローカルリストから）
   useEffect(() => {
-    const updateSuggestions = async () => {
-      if (value.length === 0) {
-        setSuggestions([]);
-        setShowSuggestions(false);
-        return;
-      }
+    if (value.length === 0) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
 
-      // ローカルのリストから候補を検索（API呼び出しなし）
-      const { searchSymbols } = await import('../utils/stockSymbols');
-      const results = searchSymbols(value, 8);
-      setSuggestions(results);
-      setShowSuggestions(results.length > 0);
-    };
-
-    updateSuggestions();
+    // インポート済みの関数を直接使用
+    const results = searchSymbols(value, 8);
+    setSuggestions(results);
+    setShowSuggestions(results.length > 0);
   }, [value]);
 
   // 外部クリックで候補を閉じる
