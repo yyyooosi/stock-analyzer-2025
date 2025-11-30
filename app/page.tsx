@@ -47,8 +47,9 @@ export default function Home() {
   const [useRealData, setUseRealData] = useState(true);
   const [dataSource, setDataSource] = useState<'real' | 'demo'>('real');
 
-  const handleSearch = async () => {
-    if (!symbol.trim()) return;
+  const handleSearch = async (searchSymbol?: string) => {
+    const targetSymbol = searchSymbol || symbol;
+    if (!targetSymbol.trim()) return;
 
     setLoading(true);
     setError(null);
@@ -56,7 +57,7 @@ export default function Home() {
     setCrashPrediction(null);
 
     try {
-      const { stock, chart } = await fetchStockData(symbol, useRealData);
+      const { stock, chart } = await fetchStockData(targetSymbol, useRealData);
 
       setStockData(stock);
       setChartData(chart);

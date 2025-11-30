@@ -6,7 +6,7 @@ import { StockSymbol } from '../utils/stockSymbols';
 interface StockSymbolInputProps {
   value: string;
   onChange: (value: string) => void;
-  onSearch: () => void;
+  onSearch: (symbol?: string) => void;
   loading?: boolean;
   disabled?: boolean;
 }
@@ -114,10 +114,8 @@ export function StockSymbolInput({
     onChange(suggestion.symbol);
     setShowSuggestions(false);
     setSelectedIndex(-1);
-    // 少し遅延してから検索を実行（入力フィールドの更新を待つ）
-    setTimeout(() => {
-      onSearch();
-    }, 100);
+    // 選択したシンボルを直接渡して検索を実行
+    onSearch(suggestion.symbol);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
