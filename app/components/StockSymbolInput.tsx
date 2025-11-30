@@ -24,36 +24,23 @@ export function StockSymbolInput({
   const inputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
 
-  // 入力値の変更時に候補を取得
+  // 入力値の変更時に候補を取得（ローカルリストから）
   useEffect(() => {
-    const fetchSuggestions = async () => {
+    const updateSuggestions = async () => {
       if (value.length === 0) {
         setSuggestions([]);
         setShowSuggestions(false);
         return;
       }
 
-      try {
-        const response = await fetch(
-          `/api/stock/symbols?q=${encodeURIComponent(value)}&limit=8`
-        );
-        if (response.ok) {
-          const data = await response.json();
-          setSuggestions(data.results || []);
-          setShowSuggestions(data.results.length > 0);
-        }
-      } catch (error) {
-        console.error('候補の取得に失敗:', error);
-        setSuggestions([]);
-      }
+      // ローカルのリストから候補を検索（API呼び出しなし）
+      const { searchSymbols } = await import('../utils/stockSymbols');
+      const results = searchSymbols(value, 8);
+      setSuggestions(results);
+      setShowSuggestions(results.length > 0);
     };
 
-    // デバウンス処理
-    const timer = setTimeout(() => {
-      fetchSuggestions();
-    }, 200);
-
-    return () => clearTimeout(timer);
+    updateSuggestions();
   }, [value]);
 
   // 外部クリックで候補を閉じる
