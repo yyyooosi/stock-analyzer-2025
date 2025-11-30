@@ -309,19 +309,19 @@ export function generateSampleData(symbol: string): { stock: StockData; chart: C
 
 // 統合データ取得関数（実データ → バリデーション）
 export async function fetchStockData(symbol: string, useRealData: boolean = true): Promise<{ stock: StockData; chart: ChartData[] }> {
-  // 事前バリデーション：有効な銘柄かチェック
-  if (!isValidSymbol(symbol)) {
-    throw new StockAPIError(
-      `シンボル "${symbol}" は無効です。有効な銘柄シンボルを入力してください。\n` +
-      `例: AAPL (Apple), MSFT (Microsoft), GOOGL (Google), TSLA (Tesla)`
-    );
-  }
-
   if (!useRealData) {
+    // デモモードではハードコードされたリストで検証
+    if (!isValidSymbol(symbol)) {
+      throw new StockAPIError(
+        `シンボル "${symbol}" は無効です。有効な銘柄シンボルを入力してください。\n` +
+        `例: AAPL (Apple), MSFT (Microsoft), GOOGL (Google), TSLA (Tesla)`
+      );
+    }
     console.log('デモモードでサンプルデータを使用中...');
     return generateSampleData(symbol);
   }
 
+  // 実データモードではAPI側の検証を信頼
   try {
     console.log(`実データを取得中: ${symbol}`);
 
