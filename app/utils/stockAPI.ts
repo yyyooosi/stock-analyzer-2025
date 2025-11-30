@@ -307,22 +307,14 @@ export async function fetchStockData(symbol: string, useRealData: boolean = true
     return generateSampleData(symbol);
   }
 
-  try {
-    console.log(`実データを取得中: ${symbol}`);
+  console.log(`実データを取得中: ${symbol}`);
 
-    // 並行して株価データと履歴データを取得
-    const [stockData, chartData] = await Promise.all([
-      fetchRealStockData(symbol),
-      fetchRealChartData(symbol)
-    ]);
+  // 並行して株価データと履歴データを取得
+  const [stockData, chartData] = await Promise.all([
+    fetchRealStockData(symbol),
+    fetchRealChartData(symbol)
+  ]);
 
-    console.log('実データの取得が完了しました');
-    return { stock: stockData, chart: chartData };
-
-  } catch (error) {
-    console.warn('実データの取得に失敗、サンプルデータを使用:', error instanceof Error ? error.message : error);
-
-    // エラーが発生した場合はサンプルデータにフォールバック
-    return generateSampleData(symbol);
-  }
+  console.log('実データの取得が完了しました');
+  return { stock: stockData, chart: chartData };
 }
