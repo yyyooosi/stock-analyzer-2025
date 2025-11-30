@@ -27,6 +27,7 @@ if (process.env.GITHUB_ID && process.env.GITHUB_SECRET) {
 export const config = {
   providers,
   trustHost: true, // Vercelデプロイ時に必須
+  debug: process.env.NODE_ENV === 'development', // 開発環境でデバッグログを有効化
   pages: {
     signIn: '/auth/signin',
   },

@@ -35,15 +35,29 @@
 
 Storageタブから、**Settings** > **Environment Variables**に移動：
 
+**重要**: NextAuth.js v5では環境変数のプレフィックスが変更されています。以下の2つの方法があります：
+
+#### 方法A: AUTH_* プレフィックス（推奨）
 ```
-Name: NEXTAUTH_URL
-Value: https://stock-analyzer-2025-huzw-bpnmev1zd-yyoos-projects.vercel.app
+Name: AUTH_SECRET
+Value: K/HPDUDNqsv14ONMZg77rbIR7BYZn/TE+3kgXFOdQWU=
 Environment: Production, Preview, Development
 
+Name: AUTH_TRUST_HOST
+Value: true
+Environment: Production, Preview, Development
+```
+
+#### 方法B: NEXTAUTH_* プレフィックス（後方互換性）
+```
 Name: NEXTAUTH_SECRET
 Value: K/HPDUDNqsv14ONMZg77rbIR7BYZn/TE+3kgXFOdQWU=
 Environment: Production, Preview, Development
+
+※ NEXTAUTH_URLは不要です（trustHost: trueがコードに設定済み）
 ```
+
+**どちらかを選択してください**（両方設定する必要はありません）
 
 ### ステップ3: デプロイ
 
@@ -145,12 +159,15 @@ https://stock-analyzer-2025-huzw-bpnmev1zd-yyoos-projects.vercel.app/api/db-init
 
 ### 認証エラー
 
-**エラー**: "認証が必要です"
+**エラー**: "There is a problem with the server configuration"
 
 **解決策**:
-1. `NEXTAUTH_SECRET` が設定されているか確認
-2. `NEXTAUTH_URL` が正しいドメインに設定されているか確認
+1. `AUTH_SECRET` または `NEXTAUTH_SECRET` が設定されているか確認
+2. `AUTH_TRUST_HOST=true` が設定されているか確認（または trustHost: true がコードに設定済み）
 3. OAuthアプリのCallback URLが正しいか確認
+4. GitHub OAuth使用時、`GITHUB_ID` と `GITHUB_SECRET` が正しく設定されているか確認
+5. 環境変数を追加・変更した後は**必ず再デプロイ**してください
+6. Vercelの Environment Variables で、**Production, Preview, Development** 全てにチェックが入っているか確認
 
 ### ウォッチリストが保存されない
 

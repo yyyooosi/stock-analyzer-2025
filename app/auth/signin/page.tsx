@@ -1,8 +1,9 @@
 import { signIn } from "@/auth";
 
-export default function SignInPage() {
-  const hasGoogleAuth = process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET;
-  const hasGitHubAuth = process.env.GITHUB_ID && process.env.GITHUB_SECRET;
+export default async function SignInPage() {
+  // サーバーコンポーネントで環境変数を確認
+  const hasGoogleAuth = !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+  const hasGitHubAuth = !!(process.env.GITHUB_ID && process.env.GITHUB_SECRET);
   const hasAnyAuth = hasGoogleAuth || hasGitHubAuth;
 
   return (
@@ -61,7 +62,12 @@ export default function SignInPage() {
             <form
               action={async () => {
                 "use server";
-                await signIn("github", { redirectTo: "/watchlist" });
+                try {
+                  await signIn("github", { redirectTo: "/watchlist" });
+                } catch (error) {
+                  console.error("GitHub認証エラー:", error);
+                  throw error;
+                }
               }}
             >
               <button
