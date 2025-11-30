@@ -9,7 +9,17 @@ import {
 // ウォッチリストを取得
 export async function GET() {
   try {
-    const session = await auth();
+    let session;
+    try {
+      session = await auth();
+    } catch (authError) {
+      console.error('認証エラー:', authError);
+      // 認証システムエラーの場合は401を返してlocalStorageにフォールバック
+      return NextResponse.json(
+        { error: '認証が必要です' },
+        { status: 401 }
+      );
+    }
 
     if (!session?.user?.email) {
       return NextResponse.json(
@@ -28,13 +38,6 @@ export async function GET() {
     });
   } catch (error) {
     console.error('ウォッチリスト取得エラー:', error);
-    // サーバーレス環境でデータベースが使えない場合
-    if (error instanceof Error && error.message.includes('サーバーレス環境')) {
-      return NextResponse.json(
-        { error: 'サーバーレス環境ではデータベースが利用できません。localStorageを使用してください。' },
-        { status: 503 }
-      );
-    }
     return NextResponse.json(
       { error: 'ウォッチリストの取得に失敗しました' },
       { status: 500 }
@@ -45,7 +48,17 @@ export async function GET() {
 // ウォッチリストに銘柄を追加
 export async function POST(request: NextRequest) {
   try {
-    const session = await auth();
+    let session;
+    try {
+      session = await auth();
+    } catch (authError) {
+      console.error('認証エラー:', authError);
+      // 認証システムエラーの場合は401を返してlocalStorageにフォールバック
+      return NextResponse.json(
+        { error: '認証が必要です' },
+        { status: 401 }
+      );
+    }
 
     if (!session?.user?.email) {
       return NextResponse.json(
@@ -76,13 +89,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('ウォッチリスト追加エラー:', error);
-    // サーバーレス環境でデータベースが使えない場合
-    if (error instanceof Error && error.message.includes('サーバーレス環境')) {
-      return NextResponse.json(
-        { error: 'サーバーレス環境ではデータベースが利用できません。localStorageを使用してください。' },
-        { status: 503 }
-      );
-    }
     return NextResponse.json(
       { error: 'ウォッチリストへの追加に失敗しました' },
       { status: 500 }
@@ -93,7 +99,17 @@ export async function POST(request: NextRequest) {
 // ウォッチリストから銘柄を削除
 export async function DELETE(request: NextRequest) {
   try {
-    const session = await auth();
+    let session;
+    try {
+      session = await auth();
+    } catch (authError) {
+      console.error('認証エラー:', authError);
+      // 認証システムエラーの場合は401を返してlocalStorageにフォールバック
+      return NextResponse.json(
+        { error: '認証が必要です' },
+        { status: 401 }
+      );
+    }
 
     if (!session?.user?.email) {
       return NextResponse.json(
@@ -124,13 +140,6 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('ウォッチリスト削除エラー:', error);
-    // サーバーレス環境でデータベースが使えない場合
-    if (error instanceof Error && error.message.includes('サーバーレス環境')) {
-      return NextResponse.json(
-        { error: 'サーバーレス環境ではデータベースが利用できません。localStorageを使用してください。' },
-        { status: 503 }
-      );
-    }
     return NextResponse.json(
       { error: 'ウォッチリストからの削除に失敗しました' },
       { status: 500 }
