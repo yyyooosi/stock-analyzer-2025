@@ -230,7 +230,7 @@ export function generateSampleData(symbol: string): { stock: StockData; chart: C
   // 銘柄シンボルからシード値を生成（同じ銘柄なら同じシード）
   const seed = stringToSeed(symbol);
   const rng = new SeededRandom(seed);
-  
+
   // 銘柄ごとに特徴的な基準価格を設定
   const symbolPrices: { [key: string]: number } = {
     'AAPL': 150,
@@ -244,24 +244,24 @@ export function generateSampleData(symbol: string): { stock: StockData; chart: C
     'BABA': 100,
     'DIS': 100
   };
-  
+
   const basePrice = symbolPrices[symbol.toUpperCase()] || (50 + rng.next() * 150);
-  
+
   // 30日間のチャートデータを生成（一貫性のあるデータ）
   const chartDataArray: ChartData[] = [];
   let currentPriceValue = basePrice;
-  
+
   for (let i = 29; i >= 0; i--) {
     const date = new Date();
     date.setDate(date.getDate() - i);
-    
+
     // 銘柄とi値をシードに使用して一貫性のあるランダム値を生成
     const dayRng = new SeededRandom(seed + i);
-    
+
     const volatility = 0.02; // 2%のボラティリティに調整
     const trendFactor = i > 15 ? -0.0005 : 0.001; // より穏やかなトレンド
     const dailyChange = (dayRng.next() - 0.5) * volatility + trendFactor;
-    
+
     const open = currentPriceValue;
     const close = currentPriceValue * (1 + dailyChange);
     const high = Math.max(open, close) * (1 + dayRng.next() * 0.015);
@@ -283,7 +283,7 @@ export function generateSampleData(symbol: string): { stock: StockData; chart: C
   // 今日の価格変動を計算（一貫性のある変動）
   const todayRng = new SeededRandom(seed + 100);
   const todayChange = (todayRng.next() - 0.5) * 0.03; // 3%以内の変動
-  
+
   const finalPrice = currentPriceValue * (1 + todayChange);
   const yesterdayPrice = chartDataArray[chartDataArray.length - 1].close;
   const change = finalPrice - yesterdayPrice;
@@ -307,22 +307,14 @@ export async function fetchStockData(symbol: string, useRealData: boolean = true
     return generateSampleData(symbol);
   }
 
-  try {
-    console.log(`実データを取得中: ${symbol}`);
+  console.log(`実データを取得中: ${symbol}`);
 
-    // 並行して株価データと履歴データを取得
-    const [stockData, chartData] = await Promise.all([
-      fetchRealStockData(symbol),
-      fetchRealChartData(symbol)
-    ]);
+  // 並行して株価データと履歴データを取得
+  const [stockData, chartData] = await Promise.all([
+    fetchRealStockData(symbol),
+    fetchRealChartData(symbol)
+  ]);
 
-    console.log('実データの取得が完了しました');
-    return { stock: stockData, chart: chartData };
-
-  } catch (error) {
-    console.warn('実データの取得に失敗、サンプルデータを使用:', error instanceof Error ? error.message : error);
-
-    // エラーが発生した場合はサンプルデータにフォールバック
-    return generateSampleData(symbol);
-  }
+  console.log('実データの取得が完了しました');
+  return { stock: stockData, chart: chartData };
 }
