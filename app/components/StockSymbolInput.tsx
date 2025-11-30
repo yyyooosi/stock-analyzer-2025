@@ -21,7 +21,6 @@ export function StockSymbolInput({
   const [suggestions, setSuggestions] = useState<StockSymbol[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
-  const [isValidating, setIsValidating] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
 
@@ -75,7 +74,7 @@ export function StockSymbolInput({
   }, []);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (!showSuggestions) {
+    if (!showSuggestions || suggestions.length === 0) {
       if (e.key === 'Enter') {
         onSearch();
       }
@@ -98,6 +97,9 @@ export function StockSymbolInput({
         if (selectedIndex >= 0 && suggestions[selectedIndex]) {
           handleSelectSuggestion(suggestions[selectedIndex]);
         } else {
+          // 候補が表示されているが選択されていない場合は、候補を閉じて検索を実行
+          setShowSuggestions(false);
+          setSelectedIndex(-1);
           onSearch();
         }
         break;
