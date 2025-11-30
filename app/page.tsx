@@ -12,6 +12,7 @@ import { TechnicalIndicators } from './components/TechnicalIndicators';
 import { BuySignal } from './components/BuySignal';
 import BacktestResults from './components/BacktestResults';
 import { CrashPredictionComponent } from './components/CrashPrediction';
+import { StockSymbolInput } from './components/StockSymbolInput';
 
 interface StockData {
   symbol: string;
@@ -199,13 +200,11 @@ export default function Home() {
         {/* 検索セクション */}
         <div className="flex justify-center mb-8">
           <div className="flex gap-4 w-full max-w-md">
-            <input
-              type="text"
+            <StockSymbolInput
               value={symbol}
-              onChange={(e) => setSymbol(e.target.value.toUpperCase())}
-              placeholder="株式シンボル (例: AAPL, MSFT)"
-              className="flex-1 px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500"
-              onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+              onChange={setSymbol}
+              onSearch={handleSearch}
+              loading={loading}
             />
             <button
               onClick={handleSearch}

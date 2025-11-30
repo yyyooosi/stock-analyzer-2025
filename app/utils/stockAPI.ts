@@ -1,3 +1,5 @@
+import { isValidSymbol } from './stockSymbols';
+
 interface StockData {
   symbol: string;
   price: number;
@@ -227,6 +229,11 @@ function stringToSeed(str: string): number {
 
 // デモモード用のサンプルデータ生成（銘柄ごとに一貫性のあるデータ）
 export function generateSampleData(symbol: string): { stock: StockData; chart: ChartData[] } {
+  // デモモードでも有効な銘柄のみ許可
+  if (!isValidSymbol(symbol)) {
+    throw new StockAPIError(`シンボル "${symbol}" は無効です。有効な銘柄シンボルを入力してください。`);
+  }
+
   // 銘柄シンボルからシード値を生成（同じ銘柄なら同じシード）
   const seed = stringToSeed(symbol);
   const rng = new SeededRandom(seed);
@@ -300,8 +307,16 @@ export function generateSampleData(symbol: string): { stock: StockData; chart: C
   return { stock, chart: chartDataArray };
 }
 
-// 統合データ取得関数（実データ → フォールバック → サンプルデータ）
+// 統合データ取得関数（実データ → バリデーション）
 export async function fetchStockData(symbol: string, useRealData: boolean = true): Promise<{ stock: StockData; chart: ChartData[] }> {
+  // 事前バリデーション：有効な銘柄かチェック
+  if (!isValidSymbol(symbol)) {
+    throw new StockAPIError(
+      `シンボル "${symbol}" は無効です。有効な銘柄シンボルを入力してください。\n` +
+      `例: AAPL (Apple), MSFT (Microsoft), GOOGL (Google), TSLA (Tesla)`
+    );
+  }
+
   if (!useRealData) {
     console.log('デモモードでサンプルデータを使用中...');
     return generateSampleData(symbol);
@@ -320,9 +335,10 @@ export async function fetchStockData(symbol: string, useRealData: boolean = true
     return { stock: stockData, chart: chartData };
 
   } catch (error) {
-    console.warn('実データの取得に失敗、サンプルデータを使用:', error instanceof Error ? error.message : error);
-
-    // エラーが発生した場合はサンプルデータにフォールバック
-    return generateSampleData(symbol);
+    // 実データモードではエラーをそのまま投げる（フォールバックしない）
+    if (error instanceof StockAPIError) {
+      throw error;
+    }
+    throw new StockAPIError(`データ取得エラー: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
