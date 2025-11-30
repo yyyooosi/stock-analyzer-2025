@@ -18,7 +18,7 @@ export async function GET() {
       );
     }
 
-    const watchlist = getUserWatchlist(session.user.email);
+    const watchlist = await getUserWatchlist(session.user.email);
 
     return NextResponse.json({
       items: watchlist.map(item => ({
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const added = addToWatchlistDb(session.user.email, symbol);
+    const added = await addToWatchlistDb(session.user.email, symbol);
 
     if (!added) {
       return NextResponse.json(
@@ -112,7 +112,7 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const removed = removeFromWatchlistDb(session.user.email, symbol);
+    const removed = await removeFromWatchlistDb(session.user.email, symbol);
 
     if (!removed) {
       return NextResponse.json(

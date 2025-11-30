@@ -1,40 +1,4 @@
-import Database from 'better-sqlite3';
-import path from 'path';
-
-const dbPath = path.join(process.cwd(), 'watchlist.db');
-let db: Database.Database | null = null;
-
-export function getDatabase() {
-  // Vercelなどのサーバーレス環境ではSQLiteが使えないため、エラーハンドリング
-  try {
-    if (!db) {
-      db = new Database(dbPath);
-      initializeDatabase(db);
-    }
-    return db;
-  } catch (error) {
-    console.error('データベース初期化エラー（サーバーレス環境では正常）:', error);
-    return null;
-  }
-}
-
-function initializeDatabase(database: Database.Database) {
-  // ウォッチリストテーブルを作成
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS watchlist (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_email TEXT NOT NULL,
-      symbol TEXT NOT NULL,
-      added_at TEXT NOT NULL,
-      UNIQUE(user_email, symbol)
-    )
-  `);
-
-  // インデックスを作成
-  database.exec(`
-    CREATE INDEX IF NOT EXISTS idx_user_email ON watchlist(user_email);
-  `);
-}
+import { sql } from '@vercel/postgres';
 
 export interface WatchlistDbItem {
   id: number;
@@ -43,63 +7,102 @@ export interface WatchlistDbItem {
   added_at: string;
 }
 
-// ユーザーのウォッチリストを取得
-export function getUserWatchlist(userEmail: string): WatchlistDbItem[] {
-  const db = getDatabase();
-  if (!db) {
-    throw new Error('データベースが利用できません（サーバーレス環境）');
+// テーブルの初期化（初回のみ実行）
+export async function initializeDatabase() {
+  try {
+    await sql`
+      CREATE TABLE IF NOT EXISTS watchlist (
+        id SERIAL PRIMARY KEY,
+        user_email TEXT NOT NULL,
+        symbol TEXT NOT NULL,
+        added_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        UNIQUE(user_email, symbol)
+      )
+    `;
+
+    // インデックスを作成
+    await sql`
+      CREATE INDEX IF NOT EXISTS idx_user_email ON watchlist(user_email)
+    `;
+
+    console.log('データベースの初期化が完了しました');
+  } catch (error) {
+    console.error('データベース初期化エラー:', error);
+    throw error;
   }
-  const stmt = db.prepare('SELECT * FROM watchlist WHERE user_email = ? ORDER BY added_at DESC');
-  return stmt.all(userEmail) as WatchlistDbItem[];
+}
+
+// ユーザーのウォッチリストを取得
+export async function getUserWatchlist(userEmail: string): Promise<WatchlistDbItem[]> {
+  try {
+    const { rows } = await sql`
+      SELECT * FROM watchlist
+      WHERE user_email = ${userEmail}
+      ORDER BY added_at DESC
+    `;
+    return rows as WatchlistDbItem[];
+  } catch (error) {
+    console.error('ウォッチリスト取得エラー:', error);
+    throw error;
+  }
 }
 
 // ウォッチリストに銘柄を追加
-export function addToWatchlistDb(userEmail: string, symbol: string): boolean {
-  const db = getDatabase();
-  if (!db) {
-    throw new Error('データベースが利用できません（サーバーレス環境）');
-  }
+export async function addToWatchlistDb(userEmail: string, symbol: string): Promise<boolean> {
   try {
-    const stmt = db.prepare('INSERT INTO watchlist (user_email, symbol, added_at) VALUES (?, ?, ?)');
-    stmt.run(userEmail, symbol.toUpperCase(), new Date().toISOString());
+    await sql`
+      INSERT INTO watchlist (user_email, symbol, added_at)
+      VALUES (${userEmail}, ${symbol.toUpperCase()}, NOW())
+    `;
     return true;
-  } catch (error) {
+  } catch (error: any) {
     // UNIQUE制約違反の場合はfalseを返す
-    if (error instanceof Error && error.message.includes('UNIQUE constraint failed')) {
+    if (error?.code === '23505') { // PostgreSQLのunique_violation
       return false;
     }
+    console.error('ウォッチリスト追加エラー:', error);
     throw error;
   }
 }
 
 // ウォッチリストから銘柄を削除
-export function removeFromWatchlistDb(userEmail: string, symbol: string): boolean {
-  const db = getDatabase();
-  if (!db) {
-    throw new Error('データベースが利用できません（サーバーレス環境）');
+export async function removeFromWatchlistDb(userEmail: string, symbol: string): Promise<boolean> {
+  try {
+    const result = await sql`
+      DELETE FROM watchlist
+      WHERE user_email = ${userEmail} AND symbol = ${symbol.toUpperCase()}
+    `;
+    return result.rowCount !== null && result.rowCount > 0;
+  } catch (error) {
+    console.error('ウォッチリスト削除エラー:', error);
+    throw error;
   }
-  const stmt = db.prepare('DELETE FROM watchlist WHERE user_email = ? AND symbol = ?');
-  const result = stmt.run(userEmail, symbol.toUpperCase());
-  return result.changes > 0;
 }
 
 // ウォッチリストに銘柄が存在するか確認
-export function isInWatchlistDb(userEmail: string, symbol: string): boolean {
-  const db = getDatabase();
-  if (!db) {
-    throw new Error('データベースが利用できません（サーバーレス環境）');
+export async function isInWatchlistDb(userEmail: string, symbol: string): Promise<boolean> {
+  try {
+    const { rows } = await sql`
+      SELECT COUNT(*) as count
+      FROM watchlist
+      WHERE user_email = ${userEmail} AND symbol = ${symbol.toUpperCase()}
+    `;
+    return rows[0].count > 0;
+  } catch (error) {
+    console.error('ウォッチリスト確認エラー:', error);
+    throw error;
   }
-  const stmt = db.prepare('SELECT COUNT(*) as count FROM watchlist WHERE user_email = ? AND symbol = ?');
-  const result = stmt.get(userEmail, symbol.toUpperCase()) as { count: number };
-  return result.count > 0;
 }
 
 // ウォッチリストをクリア
-export function clearWatchlistDb(userEmail: string): void {
-  const db = getDatabase();
-  if (!db) {
-    throw new Error('データベースが利用できません（サーバーレス環境）');
+export async function clearWatchlistDb(userEmail: string): Promise<void> {
+  try {
+    await sql`
+      DELETE FROM watchlist
+      WHERE user_email = ${userEmail}
+    `;
+  } catch (error) {
+    console.error('ウォッチリストクリアエラー:', error);
+    throw error;
   }
-  const stmt = db.prepare('DELETE FROM watchlist WHERE user_email = ?');
-  stmt.run(userEmail);
 }
