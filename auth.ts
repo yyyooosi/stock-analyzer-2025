@@ -24,6 +24,18 @@ if (process.env.GITHUB_ID && process.env.GITHUB_SECRET) {
   );
 }
 
+// 環境変数チェック
+if (providers.length === 0) {
+  console.warn('⚠️ 警告: OAuth プロバイダーが設定されていません');
+  console.warn('   GITHUB_ID と GITHUB_SECRET を環境変数に設定してください');
+  console.warn('   設定後は必ず再デプロイしてください');
+}
+
+if (!process.env.AUTH_SECRET && !process.env.NEXTAUTH_SECRET) {
+  console.error('❌ エラー: AUTH_SECRET または NEXTAUTH_SECRET が設定されていません');
+  console.error('   認証が正しく動作しません');
+}
+
 export const config = {
   providers,
   trustHost: true, // Vercelデプロイ時に必須
