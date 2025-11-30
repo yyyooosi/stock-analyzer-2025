@@ -19,8 +19,8 @@ export async function getWatchlistFromServer(): Promise<WatchlistItem[]> {
     const response = await fetch('/api/watchlist');
 
     if (!response.ok) {
-      if (response.status === 401) {
-        // 未認証の場合はlocalStorageを使用
+      if (response.status === 401 || response.status === 503) {
+        // 未認証またはサーバーレス環境の場合はlocalStorageを使用
         return getWatchlist();
       }
       throw new Error('ウォッチリストの取得に失敗しました');
@@ -46,8 +46,8 @@ export async function addToWatchlistServer(symbol: string): Promise<boolean> {
     });
 
     if (!response.ok) {
-      if (response.status === 401) {
-        // 未認証の場合はlocalStorageを使用
+      if (response.status === 401 || response.status === 503) {
+        // 未認証またはサーバーレス環境の場合はlocalStorageを使用
         return addToWatchlist(symbol);
       }
       return false;
@@ -68,8 +68,8 @@ export async function removeFromWatchlistServer(symbol: string): Promise<boolean
     });
 
     if (!response.ok) {
-      if (response.status === 401) {
-        // 未認証の場合はlocalStorageを使用
+      if (response.status === 401 || response.status === 503) {
+        // 未認証またはサーバーレス環境の場合はlocalStorageを使用
         return removeFromWatchlist(symbol);
       }
       return false;
