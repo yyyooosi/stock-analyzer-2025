@@ -9,26 +9,19 @@ import {
 // ウォッチリストを取得
 export async function GET() {
   try {
-    let session;
+    let userEmail = 'demo@localhost'; // デフォルトのデモユーザー
+
     try {
-      session = await auth();
+      const session = await auth();
+      if (session?.user?.email) {
+        userEmail = session.user.email;
+      }
     } catch (authError) {
-      console.error('認証エラー:', authError);
-      // 認証システムエラーの場合は401を返してlocalStorageにフォールバック
-      return NextResponse.json(
-        { error: '認証が必要です' },
-        { status: 401 }
-      );
+      console.warn('認証エラー、デモモードで動作:', authError);
+      // デモユーザーで続行
     }
 
-    if (!session?.user?.email) {
-      return NextResponse.json(
-        { error: '認証が必要です' },
-        { status: 401 }
-      );
-    }
-
-    const watchlist = await getUserWatchlist(session.user.email);
+    const watchlist = await getUserWatchlist(userEmail);
 
     return NextResponse.json({
       items: watchlist.map(item => ({
@@ -48,23 +41,16 @@ export async function GET() {
 // ウォッチリストに銘柄を追加
 export async function POST(request: NextRequest) {
   try {
-    let session;
-    try {
-      session = await auth();
-    } catch (authError) {
-      console.error('認証エラー:', authError);
-      // 認証システムエラーの場合は401を返してlocalStorageにフォールバック
-      return NextResponse.json(
-        { error: '認証が必要です' },
-        { status: 401 }
-      );
-    }
+    let userEmail = 'demo@localhost'; // デフォルトのデモユーザー
 
-    if (!session?.user?.email) {
-      return NextResponse.json(
-        { error: '認証が必要です' },
-        { status: 401 }
-      );
+    try {
+      const session = await auth();
+      if (session?.user?.email) {
+        userEmail = session.user.email;
+      }
+    } catch (authError) {
+      console.warn('認証エラー、デモモードで動作:', authError);
+      // デモユーザーで続行
     }
 
     const body = await request.json();
@@ -77,7 +63,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const added = await addToWatchlistDb(session.user.email, symbol);
+    const added = await addToWatchlistDb(userEmail, symbol);
 
     if (!added) {
       return NextResponse.json(
@@ -99,23 +85,16 @@ export async function POST(request: NextRequest) {
 // ウォッチリストから銘柄を削除
 export async function DELETE(request: NextRequest) {
   try {
-    let session;
-    try {
-      session = await auth();
-    } catch (authError) {
-      console.error('認証エラー:', authError);
-      // 認証システムエラーの場合は401を返してlocalStorageにフォールバック
-      return NextResponse.json(
-        { error: '認証が必要です' },
-        { status: 401 }
-      );
-    }
+    let userEmail = 'demo@localhost'; // デフォルトのデモユーザー
 
-    if (!session?.user?.email) {
-      return NextResponse.json(
-        { error: '認証が必要です' },
-        { status: 401 }
-      );
+    try {
+      const session = await auth();
+      if (session?.user?.email) {
+        userEmail = session.user.email;
+      }
+    } catch (authError) {
+      console.warn('認証エラー、デモモードで動作:', authError);
+      // デモユーザーで続行
     }
 
     const { searchParams } = new URL(request.url);
@@ -128,7 +107,7 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const removed = await removeFromWatchlistDb(session.user.email, symbol);
+    const removed = await removeFromWatchlistDb(userEmail, symbol);
 
     if (!removed) {
       return NextResponse.json(
