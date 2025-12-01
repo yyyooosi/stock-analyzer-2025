@@ -49,6 +49,7 @@ function HomeContent() {
   const [useRealData, setUseRealData] = useState(true);
   const [dataSource, setDataSource] = useState<'real' | 'demo'>('real');
   const [inWatchlist, setInWatchlist] = useState(false);
+  const [watchlistMessage, setWatchlistMessage] = useState<string | null>(null);
 
   // 現在の銘柄がウォッチリストに入っているか確認
   useEffect(() => {
@@ -181,17 +182,39 @@ function HomeContent() {
   const handleToggleWatchlist = async () => {
     if (!stockData) return;
 
-    if (inWatchlist) {
-      const removed = await removeFromWatchlistServer(stockData.symbol);
-      if (removed) {
-        setInWatchlist(false);
+    setWatchlistMessage(null);
+
+    try {
+      if (inWatchlist) {
+        console.log(`[Home] ウォッチリストから ${stockData.symbol} を削除中...`);
+        const removed = await removeFromWatchlistServer(stockData.symbol);
+        if (removed) {
+          setInWatchlist(false);
+          setWatchlistMessage(`${stockData.symbol} をウォッチリストから削除しました`);
+          console.log(`[Home] ${stockData.symbol} を削除しました`);
+        } else {
+          setWatchlistMessage(`${stockData.symbol} の削除に失敗しました`);
+          console.error(`[Home] ${stockData.symbol} の削除に失敗`);
+        }
+      } else {
+        console.log(`[Home] ウォッチリストに ${stockData.symbol} を追加中...`);
+        const added = await addToWatchlistServer(stockData.symbol);
+        if (added) {
+          setInWatchlist(true);
+          setWatchlistMessage(`${stockData.symbol} をウォッチリストに追加しました`);
+          console.log(`[Home] ${stockData.symbol} を追加しました`);
+        } else {
+          setWatchlistMessage(`${stockData.symbol} は既にウォッチリストに登録されています`);
+          console.warn(`[Home] ${stockData.symbol} は既に登録済み`);
+        }
       }
-    } else {
-      const added = await addToWatchlistServer(stockData.symbol);
-      if (added) {
-        setInWatchlist(true);
-      }
+    } catch (error) {
+      console.error('[Home] ウォッチリスト操作エラー:', error);
+      setWatchlistMessage(`エラー: ${error instanceof Error ? error.message : 'ウォッチリスト操作に失敗しました'}`);
     }
+
+    // メッセージを3秒後に消す
+    setTimeout(() => setWatchlistMessage(null), 3000);
   };
 
   const toggleDataSource = () => {
@@ -294,6 +317,17 @@ function HomeContent() {
                 </div>
                 <span className="text-sm text-gray-400">{new Date(stockData.timestamp).toLocaleString('ja-JP')}</span>
               </div>
+              {watchlistMessage && (
+                <div className={`mb-4 px-4 py-2 rounded-lg text-sm ${
+                  watchlistMessage.includes('エラー') || watchlistMessage.includes('失敗')
+                    ? 'bg-red-900/50 text-red-200'
+                    : watchlistMessage.includes('既に')
+                    ? 'bg-yellow-900/50 text-yellow-200'
+                    : 'bg-green-900/50 text-green-200'
+                }`}>
+                  {watchlistMessage}
+                </div>
+              )}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div>
                   <h3 className="text-gray-400 text-sm mb-1">現在価格</h3>
