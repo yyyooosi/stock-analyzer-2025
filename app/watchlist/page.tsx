@@ -38,7 +38,10 @@ export default function WatchlistPage() {
   // ウォッチリストを読み込み
   useEffect(() => {
     const loadWatchlist = async () => {
+      console.log('[Page] ウォッチリスト読み込み開始');
       const items = await getWatchlistFromServer();
+      console.log(`[Page] 読み込んだウォッチリスト: ${items.length}件`);
+      console.log('[Page] ウォッチリストアイテム:', JSON.stringify(items, null, 2));
       setWatchlist(items);
     };
     loadWatchlist();
@@ -199,6 +202,8 @@ export default function WatchlistPage() {
   };
 
   const sortedWatchlist = getSortedWatchlist();
+  console.log(`[Page] レンダリングする銘柄数: ${sortedWatchlist.length}`);
+  console.log('[Page] ソート済みウォッチリスト:', sortedWatchlist.map(item => item.symbol).join(', '));
 
   const getSignalColor = (score: number) => {
     if (score >= 60) return 'text-green-400 bg-green-900/30';

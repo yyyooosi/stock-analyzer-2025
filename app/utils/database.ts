@@ -35,12 +35,17 @@ export async function initializeDatabase() {
 // ユーザーのウォッチリストを取得
 export async function getUserWatchlist(userEmail: string): Promise<WatchlistDbItem[]> {
   try {
-    const { rows } = await sql`
-      SELECT * FROM watchlist
+    const result = await sql`
+      SELECT id, user_email, symbol, added_at
+      FROM watchlist
       WHERE user_email = ${userEmail}
       ORDER BY added_at DESC
     `;
-    return rows as WatchlistDbItem[];
+    console.log(`[Database] getUserWatchlist for ${userEmail}:`);
+    console.log(`[Database] rowCount = ${result.rowCount}`);
+    console.log(`[Database] rows.length = ${result.rows.length}`);
+    console.log('[Database] 取得したデータ:', JSON.stringify(result.rows, null, 2));
+    return result.rows as WatchlistDbItem[];
   } catch (error) {
     console.error('ウォッチリスト取得エラー:', error);
     throw error;
