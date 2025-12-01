@@ -370,7 +370,9 @@ export default function WatchlistPage() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-center">
-                        {quote?.technicalIndicators?.macd ? (
+                        {quote?.technicalIndicators?.macd &&
+                         quote.technicalIndicators.macd.macd !== null &&
+                         quote.technicalIndicators.macd.signal !== null ? (
                           <div className="flex flex-col items-center gap-1">
                             <span className="text-sm">{quote.technicalIndicators.macd.macd.toFixed(2)}</span>
                             <span className="text-xs text-gray-400">
