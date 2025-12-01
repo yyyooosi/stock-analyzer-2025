@@ -1,17 +1,19 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { fetchStockData } from './utils/stockAPI';
 import { calculateAllIndicators, getLatestIndicators } from './utils/technicalIndicators';
 import { analyzeSignals, SignalAnalysis } from './utils/signalAnalysis';
 import { runBacktest } from './utils/backtest';
 import { fetchCrashTweets, Tweet } from './utils/twitterAPI';
 import { predictCrash, CrashPrediction, integrateWithTechnicalAnalysis } from './utils/crashPrediction';
+import { addToWatchlist, removeFromWatchlist, isInWatchlist } from './utils/watchlist';
 import { StockChart } from './components/StockChart';
 import { TechnicalIndicators } from './components/TechnicalIndicators';
 import { BuySignal } from './components/BuySignal';
 import BacktestResults from './components/BacktestResults';
 import { CrashPredictionComponent } from './components/CrashPrediction';
+import { Navigation } from './components/Navigation';
 
 interface StockData {
   symbol: string;
@@ -45,6 +47,14 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [useRealData, setUseRealData] = useState(true);
   const [dataSource, setDataSource] = useState<'real' | 'demo'>('real');
+  const [inWatchlist, setInWatchlist] = useState(false);
+
+  // ウォッチリストの状態を確認
+  useEffect(() => {
+    if (stockData) {
+      setInWatchlist(isInWatchlist(stockData.symbol));
+    }
+  }, [stockData]);
 
   const handleSearch = async () => {
     if (!symbol.trim()) return;
@@ -152,6 +162,18 @@ export default function Home() {
     setUseRealData(newSource === 'real');
   };
 
+  const toggleWatchlist = () => {
+    if (!stockData) return;
+
+    if (inWatchlist) {
+      removeFromWatchlist(stockData.symbol);
+      setInWatchlist(false);
+    } else {
+      addToWatchlist(stockData.symbol);
+      setInWatchlist(true);
+    }
+  };
+
   const getSignalColor = (analysis: SignalAnalysis | null) => {
     if (!analysis) return 'text-gray-400';
     if (analysis.overallScore >= 60) return 'text-green-400';
@@ -170,9 +192,9 @@ export default function Home() {
     <div className="min-h-screen bg-gray-900 text-white">
       <div className="container mx-auto px-4 py-8">
         {/* ヘッダー */}
-        <header className="text-center mb-8">
+        <header className="mb-8">
           <div className="flex justify-between items-center mb-4">
-            <h1 className="text-4xl font-bold">米国株分析ツール</h1>
+            <h1 className="text-4xl font-bold text-center flex-1">米国株分析ツール</h1>
             <div className="flex items-center gap-4">
               <span className="text-gray-400">データソース:</span>
               <button
@@ -193,8 +215,10 @@ export default function Home() {
               )}
             </div>
           </div>
-          <p className="text-gray-400">経験豊富な投資家向けの高度な株価分析システム</p>
+          <p className="text-gray-400 text-center">経験豊富な投資家向けの高度な株価分析システム</p>
         </header>
+
+        <Navigation />
 
         {/* 検索セクション */}
         <div className="flex justify-center mb-8">
@@ -230,7 +254,20 @@ export default function Home() {
             {/* 株価情報 */}
             <div className="bg-gray-800 rounded-lg p-6">
               <div className="flex justify-between items-center mb-4">
-                <h2 className="text-2xl font-bold">{stockData.symbol}</h2>
+                <div className="flex items-center gap-4">
+                  <h2 className="text-2xl font-bold">{stockData.symbol}</h2>
+                  <button
+                    onClick={toggleWatchlist}
+                    className={`px-4 py-2 rounded-lg transition-colors ${
+                      inWatchlist
+                        ? 'bg-yellow-600 hover:bg-yellow-700'
+                        : 'bg-gray-700 hover:bg-gray-600'
+                    }`}
+                    title={inWatchlist ? 'ウォッチリストから削除' : 'ウォッチリストに追加'}
+                  >
+                    {inWatchlist ? '★ ウォッチリスト登録済み' : '☆ ウォッチリストに追加'}
+                  </button>
+                </div>
                 <span className="text-sm text-gray-400">{new Date(stockData.timestamp).toLocaleString('ja-JP')}</span>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
