@@ -29,12 +29,16 @@ export async function GET() {
     }
 
     const watchlist = await getUserWatchlist(session.user.email);
+    console.log(`[API] ウォッチリスト取得: ${watchlist.length}件の銘柄`);
+
+    const responseItems = watchlist.map(item => ({
+      symbol: item.symbol,
+      addedAt: item.added_at,
+    }));
+    console.log('[API] レスポンスデータ:', JSON.stringify(responseItems, null, 2));
 
     return NextResponse.json({
-      items: watchlist.map(item => ({
-        symbol: item.symbol,
-        addedAt: item.added_at,
-      })),
+      items: responseItems,
     });
   } catch (error) {
     console.error('ウォッチリスト取得エラー:', error);

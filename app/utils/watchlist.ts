@@ -19,17 +19,22 @@ export async function getWatchlistFromServer(): Promise<WatchlistItem[]> {
     const response = await fetch('/api/watchlist');
 
     if (!response.ok) {
+      console.log(`[Client] API レスポンスステータス: ${response.status}`);
       if (response.status === 401 || response.status === 503) {
         // 未認証またはサーバーレス環境の場合はlocalStorageを使用
+        console.log('[Client] localStorageにフォールバック');
         return getWatchlist();
       }
       throw new Error('ウォッチリストの取得に失敗しました');
     }
 
     const data: WatchlistData = await response.json();
+    console.log(`[Client] サーバーから受信した銘柄数: ${data.items?.length || 0}`);
+    console.log('[Client] 受信データ:', JSON.stringify(data.items, null, 2));
     return data.items || [];
   } catch (error) {
     console.error('サーバーからのウォッチリスト取得に失敗:', error);
+    console.log('[Client] エラーによりlocalStorageにフォールバック');
     return getWatchlist(); // フォールバック
   }
 }

@@ -34,13 +34,25 @@ export default function WatchlistPage() {
   const [dataSource, setDataSource] = useState<'real' | 'demo'>('real');
   const [sortBy, setSortBy] = useState<'symbol' | 'change' | 'changePercent' | 'signal'>('symbol');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // ウォッチリストを読み込み
-  useEffect(() => {
-    const loadWatchlist = async () => {
+  const loadWatchlist = async () => {
+    console.log('[Page] ウォッチリスト読み込み開始');
+    setIsRefreshing(true);
+    try {
       const items = await getWatchlistFromServer();
+      console.log(`[Page] 読み込んだウォッチリスト: ${items.length}件`);
+      console.log('[Page] ウォッチリストアイテム:', JSON.stringify(items, null, 2));
       setWatchlist(items);
-    };
+    } catch (error) {
+      console.error('[Page] ウォッチリスト読み込みエラー:', error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
     loadWatchlist();
   }, []);
 
@@ -123,19 +135,22 @@ export default function WatchlistPage() {
     setAddError(null);
 
     try {
+      console.log(`[Page] 銘柄追加開始: ${newSymbol.trim()}`);
       // まず株価データを取得して、有効な銘柄か確認
       await fetchStockData(newSymbol.trim(), useRealData);
 
       // ウォッチリストに追加（サーバーAPI使用）
       const added = await addToWatchlistServer(newSymbol.trim());
       if (added) {
-        const items = await getWatchlistFromServer();
-        setWatchlist(items);
+        console.log(`[Page] ${newSymbol.trim()} の追加に成功`);
+        await loadWatchlist(); // リフレッシュ
         setNewSymbol('');
       } else {
+        console.warn(`[Page] ${newSymbol.trim()} は既に登録済み`);
         setAddError('この銘柄は既にウォッチリストに登録されています');
       }
     } catch (error) {
+      console.error('[Page] 銘柄追加エラー:', error);
       setAddError(error instanceof Error ? error.message : '銘柄の追加に失敗しました');
     } finally {
       setIsAdding(false);
@@ -143,15 +158,18 @@ export default function WatchlistPage() {
   };
 
   const handleRemoveSymbol = async (symbol: string) => {
+    console.log(`[Page] 銘柄削除開始: ${symbol}`);
     const removed = await removeFromWatchlistServer(symbol);
     if (removed) {
-      const items = await getWatchlistFromServer();
-      setWatchlist(items);
+      console.log(`[Page] ${symbol} の削除に成功`);
+      await loadWatchlist(); // リフレッシュ
       setStockQuotes(prev => {
         const newMap = new Map(prev);
         newMap.delete(symbol);
         return newMap;
       });
+    } else {
+      console.error(`[Page] ${symbol} の削除に失敗`);
     }
   };
 
@@ -199,6 +217,8 @@ export default function WatchlistPage() {
   };
 
   const sortedWatchlist = getSortedWatchlist();
+  console.log(`[Page] レンダリングする銘柄数: ${sortedWatchlist.length}`);
+  console.log('[Page] ソート済みウォッチリスト:', sortedWatchlist.map(item => item.symbol).join(', '));
 
   const getSignalColor = (score: number) => {
     if (score >= 60) return 'text-green-400 bg-green-900/30';
@@ -220,6 +240,14 @@ export default function WatchlistPage() {
           <div className="flex justify-between items-center mb-4">
             <h1 className="text-4xl font-bold">マイウォッチリスト</h1>
             <div className="flex items-center gap-4">
+              <button
+                onClick={loadWatchlist}
+                disabled={isRefreshing}
+                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-600 rounded-lg transition-colors"
+                title="ウォッチリストを再読み込み"
+              >
+                {isRefreshing ? '🔄 更新中...' : '🔄 更新'}
+              </button>
               <span className="text-gray-400">データソース:</span>
               <button
                 onClick={toggleDataSource}
