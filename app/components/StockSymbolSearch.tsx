@@ -5,9 +5,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 export interface StockSearchResult {
   symbol: string;
   name: string;
-  type: string;
-  region: string;
-  currency: string;
+  exchange: string;
+  assetType: string;
 }
 
 interface StockSymbolSearchProps {
@@ -31,14 +30,48 @@ export default function StockSymbolSearch({
   className = '',
   autoFocus = false
 }: StockSymbolSearchProps) {
+  const [allSymbols, setAllSymbols] = useState<StockSearchResult[]>([]);
   const [suggestions, setSuggestions] = useState<StockSearchResult[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingSymbols, setIsLoadingSymbols] = useState(true);
   const [showDropdown, setShowDropdown] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [error, setError] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // 銘柄リストを一度だけ取得
+  useEffect(() => {
+    const loadSymbols = async () => {
+      try {
+        setIsLoadingSymbols(true);
+        const response = await fetch('/api/stock/symbols');
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || '銘柄リストの取得に失敗しました');
+        }
+
+        // StockSearchResult形式に変換
+        const symbols: StockSearchResult[] = data.symbols.map((s: any) => ({
+          symbol: s.symbol,
+          name: s.name,
+          exchange: s.exchange,
+          assetType: s.assetType
+        }));
+
+        setAllSymbols(symbols);
+        console.log(`[StockSymbolSearch] Loaded ${symbols.length} stock symbols`);
+      } catch (err) {
+        console.error('Failed to load symbols:', err);
+        setError(err instanceof Error ? err.message : '銘柄リストの読み込みに失敗しました');
+      } finally {
+        setIsLoadingSymbols(false);
+      }
+    };
+
+    loadSymbols();
+  }, []);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -52,40 +85,41 @@ export default function StockSymbolSearch({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Fetch suggestions from API
-  const fetchSuggestions = useCallback(async (query: string) => {
+  // ローカル検索（シンボルと企業名の両方から検索）
+  const searchSymbols = useCallback((query: string): StockSearchResult[] => {
     if (!query || query.trim().length === 0) {
-      setSuggestions([]);
-      setShowDropdown(false);
-      return;
+      return [];
     }
 
-    setIsLoading(true);
-    setError(null);
+    const upperQuery = query.toUpperCase();
 
-    try {
-      const response = await fetch(`/api/stock/search?q=${encodeURIComponent(query)}`);
-      const data = await response.json();
+    // シンボルまたは企業名で検索
+    const filtered = allSymbols.filter(symbol => {
+      const symbolMatch = symbol.symbol.toUpperCase().includes(upperQuery);
+      const nameMatch = symbol.name.toUpperCase().includes(upperQuery);
+      return symbolMatch || nameMatch;
+    });
 
-      if (!response.ok) {
-        setError(data.error || '検索に失敗しました');
-        setSuggestions([]);
-        setShowDropdown(false);
-        return;
+    // シンボルが前方一致するものを優先してソート
+    const sorted = filtered.sort((a, b) => {
+      const aStartsWith = a.symbol.startsWith(upperQuery);
+      const bStartsWith = b.symbol.startsWith(upperQuery);
+
+      if (aStartsWith && !bStartsWith) return -1;
+      if (!aStartsWith && bStartsWith) return 1;
+
+      // 両方とも前方一致する場合、シンボルの長さでソート
+      if (aStartsWith && bStartsWith) {
+        return a.symbol.length - b.symbol.length;
       }
 
-      setSuggestions(data.results || []);
-      setShowDropdown(data.results && data.results.length > 0);
-      setSelectedIndex(-1);
-    } catch (err) {
-      console.error('Search error:', err);
-      setError('検索中にエラーが発生しました');
-      setSuggestions([]);
-      setShowDropdown(false);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+      // それ以外はアルファベット順
+      return a.symbol.localeCompare(b.symbol);
+    });
+
+    // 最大10件に制限
+    return sorted.slice(0, 10);
+  }, [allSymbols]);
 
   // Debounced search
   const handleInputChange = (newValue: string) => {
@@ -97,10 +131,18 @@ export default function StockSymbolSearch({
       clearTimeout(debounceTimerRef.current);
     }
 
-    // Set new timer
+    // Set new timer for local search
     debounceTimerRef.current = setTimeout(() => {
-      fetchSuggestions(upperValue);
-    }, 300); // 300ms debounce
+      if (upperValue.trim().length > 0) {
+        const results = searchSymbols(upperValue);
+        setSuggestions(results);
+        setShowDropdown(results.length > 0);
+        setSelectedIndex(-1);
+      } else {
+        setSuggestions([]);
+        setShowDropdown(false);
+      }
+    }, 150); // 150ms debounce（ローカル検索なので短く）
   };
 
   // Handle suggestion selection
@@ -163,12 +205,12 @@ export default function StockSymbolSearch({
           onKeyDown={handleKeyDown}
           onKeyPress={onKeyPress}
           placeholder={placeholder}
-          disabled={disabled}
+          disabled={disabled || isLoadingSymbols}
           autoFocus={autoFocus}
           className={className}
           autoComplete="off"
         />
-        {isLoading && (
+        {isLoadingSymbols && (
           <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
             <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
           </div>
@@ -192,7 +234,7 @@ export default function StockSymbolSearch({
                   <div className="text-sm text-gray-400 truncate">{suggestion.name}</div>
                 </div>
                 <div className="text-xs text-gray-500 ml-2">
-                  {suggestion.type}
+                  {suggestion.exchange}
                 </div>
               </div>
             </div>
@@ -201,7 +243,7 @@ export default function StockSymbolSearch({
       )}
 
       {/* No results message */}
-      {showDropdown && !isLoading && suggestions.length === 0 && value.trim().length > 0 && (
+      {showDropdown && !isLoadingSymbols && suggestions.length === 0 && value.trim().length > 0 && (
         <div className="absolute z-50 w-full mt-1 bg-gray-800 border border-gray-700 rounded-lg shadow-lg p-4">
           <div className="text-gray-400 text-sm">
             「{value}」に一致する銘柄が見つかりませんでした
@@ -210,9 +252,19 @@ export default function StockSymbolSearch({
       )}
 
       {/* Error message */}
-      {error && (
+      {error && !isLoadingSymbols && (
         <div className="absolute z-50 w-full mt-1 bg-red-900 border border-red-700 rounded-lg shadow-lg p-3">
           <div className="text-red-200 text-sm">{error}</div>
+        </div>
+      )}
+
+      {/* Loading symbols message */}
+      {isLoadingSymbols && value.trim().length > 0 && (
+        <div className="absolute z-50 w-full mt-1 bg-gray-800 border border-gray-700 rounded-lg shadow-lg p-4">
+          <div className="text-gray-400 text-sm flex items-center">
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500 mr-2"></div>
+            銘柄リストを読み込み中...
+          </div>
         </div>
       )}
     </div>
