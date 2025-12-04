@@ -78,6 +78,21 @@ export function HistoricalPatternAnalysis({ result, symbol }: Props) {
     return 'text-orange-400';
   };
 
+  const getDirectionIcon = (value: number) => {
+    if (value >= 1) return '📈';
+    if (value >= 0) return '➡️';
+    if (value >= -1) return '📉';
+    return '⬇️';
+  };
+
+  const getDirectionLabel = (value: number) => {
+    if (value >= 2) return '強い上昇';
+    if (value >= 0.5) return '上昇';
+    if (value >= -0.5) return '横ばい';
+    if (value >= -2) return '下落';
+    return '強い下落';
+  };
+
   const togglePattern = (date: string) => {
     setExpandedPattern(expandedPattern === date ? null : date);
   };
@@ -97,6 +112,34 @@ export function HistoricalPatternAnalysis({ result, symbol }: Props) {
         <p className="text-gray-300 whitespace-pre-line">{summary}</p>
       </div>
 
+      {/* 予測方向性 - 大きく目立つ表示 */}
+      <div className="bg-gradient-to-r from-gray-700 to-gray-800 rounded-lg p-6 mb-6 border-2 border-gray-600">
+        <div className="text-center">
+          <h4 className="text-lg font-semibold mb-4 text-gray-300">予測される株価の方向性</h4>
+          <div className="flex items-center justify-center gap-6">
+            <div className="text-6xl">
+              {getDirectionIcon(prediction.averageReturn7Day)}
+            </div>
+            <div className="text-left">
+              <p className={`text-4xl font-bold ${getPredictionColor(prediction.averageReturn7Day)}`}>
+                {getDirectionLabel(prediction.averageReturn7Day)}
+              </p>
+              <p className="text-xl text-gray-400 mt-2">
+                7日後の期待リターン:
+                <span className={`ml-2 font-semibold ${getPredictionColor(prediction.averageReturn7Day)}`}>
+                  {prediction.averageReturn7Day > 0 ? '+' : ''}
+                  {prediction.averageReturn7Day.toFixed(2)}%
+                </span>
+              </p>
+              <p className="text-sm text-gray-400 mt-1">
+                上昇確率: <span className={getSuccessRateColor(prediction.successRate)}>{prediction.successRate.toFixed(0)}%</span>
+                {' '}/ 信頼度: <span className={getConfidenceColor(prediction.confidence)}>{prediction.confidence.toFixed(0)}%</span>
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* 予測指標 */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         {/* 成功率 */}
@@ -106,21 +149,38 @@ export function HistoricalPatternAnalysis({ result, symbol }: Props) {
             {prediction.successRate.toFixed(0)}%
           </p>
           <p className="text-xs text-gray-400 mt-2">
-            {similarPatterns.length}件のパターンから算出
+            {similarPatterns.length}件中 {Math.round(similarPatterns.length * prediction.successRate / 100)}件が上昇
           </p>
         </div>
 
         {/* 期待リターン */}
         <div className="bg-gray-700 rounded-lg p-4">
-          <h4 className="text-sm text-gray-400 mb-2">期待リターン（7日後）</h4>
-          <p className={`text-3xl font-bold ${getPredictionColor(prediction.averageReturn7Day)}`}>
-            {prediction.averageReturn7Day > 0 ? '+' : ''}
-            {prediction.averageReturn7Day.toFixed(2)}%
-          </p>
-          <div className="text-xs text-gray-400 mt-2 space-y-1">
-            <div>1日後: {prediction.averageReturn1Day > 0 ? '+' : ''}{prediction.averageReturn1Day.toFixed(2)}%</div>
-            <div>3日後: {prediction.averageReturn3Day > 0 ? '+' : ''}{prediction.averageReturn3Day.toFixed(2)}%</div>
-            <div>5日後: {prediction.averageReturn5Day > 0 ? '+' : ''}{prediction.averageReturn5Day.toFixed(2)}%</div>
+          <h4 className="text-sm text-gray-400 mb-2">期待リターン推移</h4>
+          <div className="space-y-2">
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-gray-400">1日後:</span>
+              <span className={`font-semibold ${getPredictionColor(prediction.averageReturn1Day)}`}>
+                {getDirectionIcon(prediction.averageReturn1Day)} {prediction.averageReturn1Day > 0 ? '+' : ''}{prediction.averageReturn1Day.toFixed(2)}%
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-gray-400">3日後:</span>
+              <span className={`font-semibold ${getPredictionColor(prediction.averageReturn3Day)}`}>
+                {getDirectionIcon(prediction.averageReturn3Day)} {prediction.averageReturn3Day > 0 ? '+' : ''}{prediction.averageReturn3Day.toFixed(2)}%
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-gray-400">5日後:</span>
+              <span className={`font-semibold ${getPredictionColor(prediction.averageReturn5Day)}`}>
+                {getDirectionIcon(prediction.averageReturn5Day)} {prediction.averageReturn5Day > 0 ? '+' : ''}{prediction.averageReturn5Day.toFixed(2)}%
+              </span>
+            </div>
+            <div className="flex justify-between items-center border-t border-gray-600 pt-2">
+              <span className="text-xs text-gray-400 font-semibold">7日後:</span>
+              <span className={`text-lg font-bold ${getPredictionColor(prediction.averageReturn7Day)}`}>
+                {getDirectionIcon(prediction.averageReturn7Day)} {prediction.averageReturn7Day > 0 ? '+' : ''}{prediction.averageReturn7Day.toFixed(2)}%
+              </span>
+            </div>
           </div>
         </div>
 
@@ -131,6 +191,9 @@ export function HistoricalPatternAnalysis({ result, symbol }: Props) {
             {prediction.confidence.toFixed(0)}%
           </p>
           <p className="text-xs text-gray-400 mt-2">
+            類似パターン: {similarPatterns.length}件
+          </p>
+          <p className="text-xs text-gray-400 mt-1">
             期待ボラティリティ: {prediction.volatilityExpectation.toFixed(1)}%
           </p>
         </div>
@@ -183,22 +246,29 @@ export function HistoricalPatternAnalysis({ result, symbol }: Props) {
                         </p>
                       </div>
                     </div>
-                    <div className="text-right">
+                    <div className="text-right flex items-center gap-3">
                       {pattern.futurePerformance.length > 0 && (
-                        <div>
+                        <>
                           {pattern.futurePerformance
                             .filter(p => p.days === 7)
                             .map(perf => (
-                              <p
-                                key={perf.days}
-                                className={`text-lg font-bold ${getPredictionColor(perf.priceChangePercent)}`}
-                              >
-                                {perf.priceChangePercent > 0 ? '+' : ''}
-                                {perf.priceChangePercent.toFixed(2)}%
-                              </p>
+                              <div key={perf.days} className="flex items-center gap-2">
+                                <span className="text-3xl">
+                                  {getDirectionIcon(perf.priceChangePercent)}
+                                </span>
+                                <div>
+                                  <p className={`text-sm font-semibold ${getPredictionColor(perf.priceChangePercent)}`}>
+                                    {getDirectionLabel(perf.priceChangePercent)}
+                                  </p>
+                                  <p className={`text-2xl font-bold ${getPredictionColor(perf.priceChangePercent)}`}>
+                                    {perf.priceChangePercent > 0 ? '+' : ''}
+                                    {perf.priceChangePercent.toFixed(2)}%
+                                  </p>
+                                  <p className="text-xs text-gray-400">7日後</p>
+                                </div>
+                              </div>
                             ))}
-                          <p className="text-xs text-gray-400">7日後の変動</p>
-                        </div>
+                        </>
                       )}
                     </div>
                   </div>
@@ -249,40 +319,52 @@ export function HistoricalPatternAnalysis({ result, symbol }: Props) {
                     {/* 将来のパフォーマンス */}
                     {pattern.futurePerformance.length > 0 && (
                       <div>
-                        <h5 className="text-sm font-semibold mb-2 text-gray-300">その後の株価推移</h5>
+                        <h5 className="text-sm font-semibold mb-3 text-gray-300">📈 その後の株価推移 - どう動いたか</h5>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                           {pattern.futurePerformance.map((perf) => (
                             <div
                               key={perf.days}
-                              className="bg-gray-800 rounded p-3"
+                              className={`rounded p-3 border-2 ${
+                                perf.priceChangePercent >= 1
+                                  ? 'bg-green-900/20 border-green-600/50'
+                                  : perf.priceChangePercent >= 0
+                                  ? 'bg-gray-800 border-gray-600'
+                                  : perf.priceChangePercent >= -1
+                                  ? 'bg-orange-900/20 border-orange-600/50'
+                                  : 'bg-red-900/20 border-red-600/50'
+                              }`}
                             >
-                              <p className="text-xs text-gray-400 mb-1">{perf.days}日後</p>
-                              <div className="grid grid-cols-2 gap-2 text-xs">
-                                <div>
-                                  <span className="text-gray-400">変動率:</span>
-                                  <span
-                                    className={`ml-1 font-semibold ${getPredictionColor(perf.priceChangePercent)}`}
-                                  >
-                                    {perf.priceChangePercent > 0 ? '+' : ''}
-                                    {perf.priceChangePercent.toFixed(2)}%
+                              <div className="flex items-center justify-between mb-2">
+                                <p className="text-xs text-gray-400 font-semibold">{perf.days}日後の結果</p>
+                                <div className="flex items-center gap-1">
+                                  <span className="text-xl">
+                                    {getDirectionIcon(perf.priceChangePercent)}
+                                  </span>
+                                  <span className={`text-xs font-semibold ${getPredictionColor(perf.priceChangePercent)}`}>
+                                    {getDirectionLabel(perf.priceChangePercent)}
                                   </span>
                                 </div>
-                                <div>
-                                  <span className="text-gray-400">変動額:</span>
-                                  <span className="ml-1 font-semibold">
-                                    ${perf.priceChange.toFixed(2)}
-                                  </span>
-                                </div>
+                              </div>
+                              <div className="mb-2">
+                                <span className={`text-lg font-bold ${getPredictionColor(perf.priceChangePercent)}`}>
+                                  {perf.priceChangePercent > 0 ? '+' : ''}
+                                  {perf.priceChangePercent.toFixed(2)}%
+                                </span>
+                                <span className="text-xs text-gray-400 ml-2">
+                                  (${perf.priceChange > 0 ? '+' : ''}{perf.priceChange.toFixed(2)})
+                                </span>
+                              </div>
+                              <div className="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-gray-600">
                                 <div>
                                   <span className="text-gray-400">最高値:</span>
-                                  <span className="ml-1">${perf.highestPrice.toFixed(2)}</span>
+                                  <span className="ml-1 text-green-400">${perf.highestPrice.toFixed(2)}</span>
                                 </div>
                                 <div>
                                   <span className="text-gray-400">最安値:</span>
-                                  <span className="ml-1">${perf.lowestPrice.toFixed(2)}</span>
+                                  <span className="ml-1 text-red-400">${perf.lowestPrice.toFixed(2)}</span>
                                 </div>
                                 <div className="col-span-2">
-                                  <span className="text-gray-400">ボラティリティ:</span>
+                                  <span className="text-gray-400">変動幅:</span>
                                   <span className="ml-1">{perf.volatility.toFixed(2)}%</span>
                                 </div>
                               </div>
