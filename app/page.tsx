@@ -14,6 +14,8 @@ import { TechnicalIndicators } from './components/TechnicalIndicators';
 import { BuySignal } from './components/BuySignal';
 import BacktestResults from './components/BacktestResults';
 import { CrashPredictionComponent } from './components/CrashPrediction';
+import { HistoricalPatternAnalysis } from './components/HistoricalPatternAnalysis';
+import { findSimilarPatterns } from './utils/historicalPatternAnalysis';
 
 interface StockData {
   symbol: string;
@@ -43,6 +45,8 @@ function HomeContent() {
   const [crashTweets, setCrashTweets] = useState<Tweet[]>([]);
   const [isBacktesting, setIsBacktesting] = useState(false);
   const [isAnalyzingCrash, setIsAnalyzingCrash] = useState(false);
+  const [isAnalyzingPattern, setIsAnalyzingPattern] = useState(false);
+  const [patternAnalysis, setPatternAnalysis] = useState<ReturnType<typeof findSimilarPatterns> | null>(null);
   const [symbol, setSymbol] = useState('AAPL');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -70,6 +74,7 @@ function HomeContent() {
     setError(null);
     setBacktestResult(null);
     setCrashPrediction(null);
+    setPatternAnalysis(null);
 
     try {
       const { stock, chart } = await fetchStockData(symbol, useRealData);
@@ -175,6 +180,34 @@ function HomeContent() {
         setError('バックテストの実行に失敗しました');
       } finally {
         setIsBacktesting(false);
+      }
+    }, 100);
+  };
+
+  const handlePatternAnalysis = async () => {
+    if (!chartData.length) return;
+
+    setIsAnalyzingPattern(true);
+    setError(null);
+
+    // 計算量が多いため、少し遅延を入れてUIの応答性を保つ
+    setTimeout(() => {
+      try {
+        console.log('履歴パターン分析を開始...');
+
+        // テクニカル指標を再計算（全体の指標データが必要）
+        const allIndicators = calculateAllIndicators(chartData);
+
+        // パターン分析を実行
+        const result = findSimilarPatterns(chartData, allIndicators, 70);
+        setPatternAnalysis(result);
+
+        console.log(`${result.similarPatterns.length}件の類似パターンを検出しました`);
+      } catch (err) {
+        console.error('パターン分析エラー:', err);
+        setError('パターン分析の実行に失敗しました');
+      } finally {
+        setIsAnalyzingPattern(false);
       }
     }, 100);
   };
@@ -418,6 +451,36 @@ function HomeContent() {
               {!crashPrediction && !isAnalyzingCrash && (
                 <p className="text-gray-400">
                   「暴落リスク分析」ボタンをクリックして、X投稿のネガティブセンチメントから暴落リスクを分析できます。
+                </p>
+              )}
+            </div>
+
+            {/* 履歴パターン分析セクション */}
+            <div className="bg-gray-800 rounded-lg p-6">
+              <div className="flex justify-between items-center mb-4">
+                <div>
+                  <h3 className="text-xl font-bold">履歴パターン分析</h3>
+                  <p className="text-sm text-gray-400 mt-1">現在と類似する過去のパターンから将来の株価動向を予測</p>
+                </div>
+                <button
+                  onClick={handlePatternAnalysis}
+                  disabled={isAnalyzingPattern || !chartData.length}
+                  className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-600 rounded-lg transition-colors"
+                >
+                  {isAnalyzingPattern ? 'パターン分析中...' : 'パターン分析実行'}
+                </button>
+              </div>
+
+              {patternAnalysis && (
+                <HistoricalPatternAnalysis
+                  result={patternAnalysis}
+                  symbol={stockData.symbol}
+                />
+              )}
+
+              {!patternAnalysis && !isAnalyzingPattern && (
+                <p className="text-gray-400">
+                  「パターン分析実行」ボタンをクリックして、現在の指標と類似する過去のパターンを分析し、将来の株価動向を予測できます。
                 </p>
               )}
             </div>
