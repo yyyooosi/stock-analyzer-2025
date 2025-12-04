@@ -11,6 +11,7 @@ import {
 import { fetchStockData } from '../utils/stockAPI';
 import { calculateAllIndicators, getLatestIndicators } from '../utils/technicalIndicators';
 import { analyzeSignals, SignalAnalysis } from '../utils/signalAnalysis';
+import StockSymbolSearch, { StockSearchResult } from '../components/StockSymbolSearch';
 
 interface StockQuote {
   symbol: string;
@@ -28,6 +29,7 @@ export default function WatchlistPage() {
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [stockQuotes, setStockQuotes] = useState<Map<string, StockQuote>>(new Map());
   const [newSymbol, setNewSymbol] = useState('');
+  const [selectedStock, setSelectedStock] = useState<StockSearchResult | null>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
   const [useRealData, setUseRealData] = useState(true);
@@ -268,13 +270,13 @@ export default function WatchlistPage() {
         <div className="bg-gray-800 rounded-lg p-6 mb-8">
           <h2 className="text-xl font-bold mb-4">銘柄を追加</h2>
           <div className="flex gap-4">
-            <input
-              type="text"
+            <StockSymbolSearch
               value={newSymbol}
-              onChange={(e) => setNewSymbol(e.target.value.toUpperCase())}
+              onChange={setNewSymbol}
+              onSelect={setSelectedStock}
+              onKeyPress={(e) => e.key === 'Enter' && handleAddSymbol()}
               placeholder="株式シンボル (例: AAPL, MSFT)"
               className="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:border-blue-500"
-              onKeyPress={(e) => e.key === 'Enter' && handleAddSymbol()}
               disabled={isAdding}
             />
             <button

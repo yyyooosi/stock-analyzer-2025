@@ -14,6 +14,7 @@ import { TechnicalIndicators } from './components/TechnicalIndicators';
 import { BuySignal } from './components/BuySignal';
 import BacktestResults from './components/BacktestResults';
 import { CrashPredictionComponent } from './components/CrashPrediction';
+import StockSymbolSearch, { StockSearchResult } from './components/StockSymbolSearch';
 
 interface StockData {
   symbol: string;
@@ -44,6 +45,7 @@ function HomeContent() {
   const [isBacktesting, setIsBacktesting] = useState(false);
   const [isAnalyzingCrash, setIsAnalyzingCrash] = useState(false);
   const [symbol, setSymbol] = useState('AAPL');
+  const [selectedStock, setSelectedStock] = useState<StockSearchResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [useRealData, setUseRealData] = useState(true);
@@ -270,13 +272,14 @@ function HomeContent() {
         {/* 検索セクション */}
         <div className="flex justify-center mb-8">
           <div className="flex gap-4 w-full max-w-md">
-            <input
-              type="text"
+            <StockSymbolSearch
               value={symbol}
-              onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+              onChange={setSymbol}
+              onSelect={setSelectedStock}
+              onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
               placeholder="株式シンボル (例: AAPL, MSFT)"
               className="flex-1 px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg focus:outline-none focus:border-blue-500"
-              onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+              disabled={loading}
             />
             <button
               onClick={handleSearch}
