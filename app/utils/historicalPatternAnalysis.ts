@@ -112,42 +112,37 @@ function calculateOverallSimilarity(
     totalWeight += weights.macdHistogram;
   }
 
-  // 移動平均の相対位置（価格との比率）
-  if (current.price && historical.price) {
-    if (current.sma5 && historical.sma5) {
-      const currentRatio = current.price / current.sma5;
-      const historicalRatio = historical.price / historical.sma5;
-      totalSimilarity += calculateSimilarity(currentRatio, historicalRatio, 0.1) * weights.sma5;
-      totalWeight += weights.sma5;
-    }
+  // 移動平均線同士の比率で比較（株価を参照しない）
+  // SMA5/SMA20の比率
+  if (current.sma5 && current.sma20 && historical.sma5 && historical.sma20) {
+    const currentRatio = current.sma5 / current.sma20;
+    const historicalRatio = historical.sma5 / historical.sma20;
+    totalSimilarity += calculateSimilarity(currentRatio, historicalRatio, 0.1) * weights.sma5;
+    totalWeight += weights.sma5;
+  }
 
-    if (current.sma20 && historical.sma20) {
-      const currentRatio = current.price / current.sma20;
-      const historicalRatio = historical.price / historical.sma20;
-      totalSimilarity += calculateSimilarity(currentRatio, historicalRatio, 0.1) * weights.sma20;
-      totalWeight += weights.sma20;
-    }
+  // SMA20/SMA50の比率
+  if (current.sma20 && current.sma50 && historical.sma20 && historical.sma50) {
+    const currentRatio = current.sma20 / current.sma50;
+    const historicalRatio = historical.sma20 / historical.sma50;
+    totalSimilarity += calculateSimilarity(currentRatio, historicalRatio, 0.1) * weights.sma20;
+    totalWeight += weights.sma20;
+  }
 
-    if (current.sma50 && historical.sma50) {
-      const currentRatio = current.price / current.sma50;
-      const historicalRatio = historical.price / historical.sma50;
-      totalSimilarity += calculateSimilarity(currentRatio, historicalRatio, 0.1) * weights.sma50;
-      totalWeight += weights.sma50;
-    }
+  // SMA5/SMA50の比率
+  if (current.sma5 && current.sma50 && historical.sma5 && historical.sma50) {
+    const currentRatio = current.sma5 / current.sma50;
+    const historicalRatio = historical.sma5 / historical.sma50;
+    totalSimilarity += calculateSimilarity(currentRatio, historicalRatio, 0.1) * weights.sma50;
+    totalWeight += weights.sma50;
+  }
 
-    if (current.ema12 && historical.ema12) {
-      const currentRatio = current.price / current.ema12;
-      const historicalRatio = historical.price / historical.ema12;
-      totalSimilarity += calculateSimilarity(currentRatio, historicalRatio, 0.1) * weights.ema12;
-      totalWeight += weights.ema12;
-    }
-
-    if (current.ema26 && historical.ema26) {
-      const currentRatio = current.price / current.ema26;
-      const historicalRatio = historical.price / historical.ema26;
-      totalSimilarity += calculateSimilarity(currentRatio, historicalRatio, 0.1) * weights.ema26;
-      totalWeight += weights.ema26;
-    }
+  // EMA12/EMA26の比率
+  if (current.ema12 && current.ema26 && historical.ema12 && historical.ema26) {
+    const currentRatio = current.ema12 / current.ema26;
+    const historicalRatio = historical.ema12 / historical.ema26;
+    totalSimilarity += calculateSimilarity(currentRatio, historicalRatio, 0.1) * (weights.ema12 + weights.ema26);
+    totalWeight += (weights.ema12 + weights.ema26);
   }
 
   return totalWeight > 0 ? totalSimilarity / totalWeight : 0;
