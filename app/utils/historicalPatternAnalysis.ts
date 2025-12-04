@@ -81,71 +81,166 @@ function calculateOverallSimilarity(
   historical: Partial<IndicatorSnapshot>
 ): number {
   const weights = {
-    rsi: 0.20,        // RSIは重要な指標
-    macd: 0.15,
-    macdHistogram: 0.15,
-    sma5: 0.10,
-    sma20: 0.10,
-    sma50: 0.10,
-    ema12: 0.10,
-    ema26: 0.10
+    rsi: 0.15,                 // RSI
+    rsiZone: 0.05,            // RSIの範囲（買われすぎ/売られすぎ）
+    macd: 0.12,               // MACD
+    macdHistogram: 0.12,      // MACDヒストグラム
+    macdCross: 0.06,          // MACDクロス状態
+    smaRatios: 0.15,          // 移動平均線の比率
+    smaTrend: 0.10,           // 移動平均のトレンド（配置）
+    emaRatio: 0.15,           // EMA比率
+    bollingerPosition: 0.10   // ボリンジャーバンド内の位置
   };
 
   let totalSimilarity = 0;
   let totalWeight = 0;
 
-  // RSI類似度
+  // 1. RSI類似度
   if (current.rsi !== undefined && historical.rsi !== undefined) {
-    totalSimilarity += calculateSimilarity(current.rsi, historical.rsi, 0.2) * weights.rsi;
+    totalSimilarity += calculateSimilarity(current.rsi, historical.rsi, 0.15) * weights.rsi;
     totalWeight += weights.rsi;
+
+    // RSIの範囲（ゾーン）の一致度
+    const currentZone = getRSIZone(current.rsi);
+    const historicalZone = getRSIZone(historical.rsi);
+    if (currentZone === historicalZone) {
+      totalSimilarity += 100 * weights.rsiZone; // 完全一致
+      totalWeight += weights.rsiZone;
+    } else {
+      totalWeight += weights.rsiZone;
+      // 不一致の場合は0点
+    }
   }
 
-  // MACD類似度
+  // 2. MACD類似度
   if (current.macd !== undefined && historical.macd !== undefined) {
-    totalSimilarity += calculateSimilarity(current.macd, historical.macd, 0.3) * weights.macd;
+    totalSimilarity += calculateSimilarity(current.macd, historical.macd, 0.25) * weights.macd;
     totalWeight += weights.macd;
   }
 
-  // MACDヒストグラム類似度
+  // 3. MACDヒストグラム類似度
   if (current.macdHistogram !== undefined && historical.macdHistogram !== undefined) {
-    totalSimilarity += calculateSimilarity(current.macdHistogram, historical.macdHistogram, 0.3) * weights.macdHistogram;
+    totalSimilarity += calculateSimilarity(current.macdHistogram, historical.macdHistogram, 0.25) * weights.macdHistogram;
     totalWeight += weights.macdHistogram;
+
+    // MACDクロス状態の一致度（ゴールデンクロス/デッドクロス）
+    if (current.macd !== undefined && current.macdSignal !== undefined &&
+        historical.macd !== undefined && historical.macdSignal !== undefined) {
+      const currentCross = current.macd > current.macdSignal ? 'golden' : 'dead';
+      const historicalCross = historical.macd > historical.macdSignal ? 'golden' : 'dead';
+      if (currentCross === historicalCross) {
+        totalSimilarity += 100 * weights.macdCross;
+        totalWeight += weights.macdCross;
+      } else {
+        totalWeight += weights.macdCross;
+      }
+    }
   }
 
-  // 移動平均線同士の比率で比較（株価を参照しない）
-  // SMA5/SMA20の比率
+  // 4. 移動平均線の比率（複数の比率を総合評価）
+  const smaRatioScores: number[] = [];
+
   if (current.sma5 && current.sma20 && historical.sma5 && historical.sma20) {
     const currentRatio = current.sma5 / current.sma20;
     const historicalRatio = historical.sma5 / historical.sma20;
-    totalSimilarity += calculateSimilarity(currentRatio, historicalRatio, 0.1) * weights.sma5;
-    totalWeight += weights.sma5;
+    smaRatioScores.push(calculateSimilarity(currentRatio, historicalRatio, 0.08));
   }
 
-  // SMA20/SMA50の比率
   if (current.sma20 && current.sma50 && historical.sma20 && historical.sma50) {
     const currentRatio = current.sma20 / current.sma50;
     const historicalRatio = historical.sma20 / historical.sma50;
-    totalSimilarity += calculateSimilarity(currentRatio, historicalRatio, 0.1) * weights.sma20;
-    totalWeight += weights.sma20;
+    smaRatioScores.push(calculateSimilarity(currentRatio, historicalRatio, 0.08));
   }
 
-  // SMA5/SMA50の比率
   if (current.sma5 && current.sma50 && historical.sma5 && historical.sma50) {
     const currentRatio = current.sma5 / current.sma50;
     const historicalRatio = historical.sma5 / historical.sma50;
-    totalSimilarity += calculateSimilarity(currentRatio, historicalRatio, 0.1) * weights.sma50;
-    totalWeight += weights.sma50;
+    smaRatioScores.push(calculateSimilarity(currentRatio, historicalRatio, 0.08));
   }
 
-  // EMA12/EMA26の比率
+  if (smaRatioScores.length > 0) {
+    const avgSmaRatio = smaRatioScores.reduce((a, b) => a + b, 0) / smaRatioScores.length;
+    totalSimilarity += avgSmaRatio * weights.smaRatios;
+    totalWeight += weights.smaRatios;
+  }
+
+  // 5. 移動平均のトレンド（配置）の一致度
+  if (current.sma5 && current.sma20 && current.sma50 && historical.sma5 && historical.sma20 && historical.sma50) {
+    const currentTrend = getMovingAverageTrend(current.sma5, current.sma20, current.sma50);
+    const historicalTrend = getMovingAverageTrend(historical.sma5, historical.sma20, historical.sma50);
+    if (currentTrend === historicalTrend) {
+      totalSimilarity += 100 * weights.smaTrend;
+      totalWeight += weights.smaTrend;
+    } else {
+      totalWeight += weights.smaTrend;
+    }
+  }
+
+  // 6. EMA比率
   if (current.ema12 && current.ema26 && historical.ema12 && historical.ema26) {
     const currentRatio = current.ema12 / current.ema26;
     const historicalRatio = historical.ema12 / historical.ema26;
-    totalSimilarity += calculateSimilarity(currentRatio, historicalRatio, 0.1) * (weights.ema12 + weights.ema26);
-    totalWeight += (weights.ema12 + weights.ema26);
+    totalSimilarity += calculateSimilarity(currentRatio, historicalRatio, 0.08) * weights.emaRatio;
+    totalWeight += weights.emaRatio;
+  }
+
+  // 7. ボリンジャーバンド内の位置
+  if (current.price && current.bollingerUpper && current.bollingerLower && current.bollingerMiddle &&
+      historical.price && historical.bollingerUpper && historical.bollingerLower && historical.bollingerMiddle) {
+    const currentPosition = getBollingerPosition(current.price, current.bollingerUpper, current.bollingerMiddle, current.bollingerLower);
+    const historicalPosition = getBollingerPosition(historical.price, historical.bollingerUpper, historical.bollingerMiddle, historical.bollingerLower);
+    totalSimilarity += calculateSimilarity(currentPosition, historicalPosition, 0.15) * weights.bollingerPosition;
+    totalWeight += weights.bollingerPosition;
   }
 
   return totalWeight > 0 ? totalSimilarity / totalWeight : 0;
+}
+
+/**
+ * RSIの範囲（ゾーン）を判定
+ */
+function getRSIZone(rsi: number): string {
+  if (rsi >= 70) return 'overbought';    // 買われすぎ
+  if (rsi >= 50) return 'bullish';       // 強気
+  if (rsi >= 30) return 'bearish';       // 弱気
+  return 'oversold';                     // 売られすぎ
+}
+
+/**
+ * 移動平均のトレンド（配置）を判定
+ */
+function getMovingAverageTrend(sma5: number, sma20: number, sma50: number): string {
+  if (sma5 > sma20 && sma20 > sma50) return 'strong_uptrend';    // 強い上昇トレンド
+  if (sma5 > sma20 || sma20 > sma50) return 'uptrend';          // 上昇トレンド
+  if (sma5 < sma20 && sma20 < sma50) return 'strong_downtrend'; // 強い下降トレンド
+  if (sma5 < sma20 || sma20 < sma50) return 'downtrend';        // 下降トレンド
+  return 'neutral';                                              // 中立
+}
+
+/**
+ * ボリンジャーバンド内の相対位置を計算（0-100）
+ */
+function getBollingerPosition(price: number, upper: number, middle: number, lower: number): number {
+  if (upper === lower) return 50; // バンド幅が0の場合は中央
+  const position = ((price - lower) / (upper - lower)) * 100;
+  return Math.max(0, Math.min(100, position)); // 0-100の範囲に制限
+}
+
+/**
+ * 時間的な近さによるボーナスを計算
+ * 最近のパターンほど現在の市場環境に近いため、信頼性が高い
+ */
+function calculateRecencyBonus(daysFromNow: number): number {
+  // 7日以内：10%ボーナス
+  if (daysFromNow <= 7) return 0.10;
+  // 14日以内：7%ボーナス
+  if (daysFromNow <= 14) return 0.07;
+  // 30日以内：5%ボーナス
+  if (daysFromNow <= 30) return 0.05;
+  // 60日以内：3%ボーナス
+  if (daysFromNow <= 60) return 0.03;
+  // それ以上：ボーナスなし
+  return 0;
 }
 
 /**
@@ -211,7 +306,7 @@ export function findSimilarPatterns(
     ema: { ema12: number[]; ema26: number[] };
     bollingerBands: { upper: number[]; middle: number[]; lower: number[] };
   },
-  minSimilarity: number = 50 // 最低類似度（0-100）- デフォルトを50%に下げて検出しやすく
+  minSimilarity: number = 55 // 最低類似度（0-100）- より高品質なパターンを検出
 ): PatternAnalysisResult {
   // 最新の指標を取得
   const currentIndex = priceData.length - 1;
@@ -267,7 +362,12 @@ export function findSimilarPatterns(
     };
 
     // 類似度を計算
-    const similarity = calculateOverallSimilarity(currentIndicators, historicalIndicators);
+    let similarity = calculateOverallSimilarity(currentIndicators, historicalIndicators);
+
+    // 時間的な近さによるボーナス（最近のパターンほど信頼性が高い）
+    const daysFromNow = currentIndex - i;
+    const recencyBonus = calculateRecencyBonus(daysFromNow);
+    const adjustedSimilarity = similarity * (1 + recencyBonus);
 
     // 閾値以上の類似度の場合のみ追加
     if (similarity >= minSimilarity) {
@@ -277,7 +377,7 @@ export function findSimilarPatterns(
       if (futurePerformance.length > 0) {
         similarPatterns.push({
           date: priceData[i].date,
-          similarity,
+          similarity: adjustedSimilarity, // 調整後の類似度を使用
           indicators: historicalIndicators,
           futurePerformance
         });
@@ -285,7 +385,7 @@ export function findSimilarPatterns(
     }
   }
 
-  // 類似度でソート
+  // 調整後の類似度でソート
   similarPatterns.sort((a, b) => b.similarity - a.similarity);
 
   // パターンが見つからない場合、段階的に閾値を下げて再検索

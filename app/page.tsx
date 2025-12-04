@@ -198,8 +198,8 @@ function HomeContent() {
         // テクニカル指標を再計算（全体の指標データが必要）
         const allIndicators = calculateAllIndicators(chartData);
 
-        // パターン分析を実行（類似度50%以上で検索）
-        const result = findSimilarPatterns(chartData, allIndicators, 50);
+        // パターン分析を実行（類似度55%以上で検索、より高品質なパターンを検出）
+        const result = findSimilarPatterns(chartData, allIndicators, 55);
         setPatternAnalysis(result);
 
         console.log(`${result.similarPatterns.length}件の類似パターンを検出しました`);
