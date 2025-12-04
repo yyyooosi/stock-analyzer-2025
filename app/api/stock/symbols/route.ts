@@ -1,32 +1,29 @@
 import { NextResponse } from 'next/server';
-import {
-  getCachedSymbols,
-  fetchSymbolsFromAlphaVantage,
-  StockSymbol
-} from '@/app/utils/symbolsCache';
-
-const ALPHA_VANTAGE_API_KEY = process.env.ALPHA_VANTAGE_API_KEY;
+import popularStocks from '@/app/data/popular-stocks.json';
 
 export const dynamic = 'force-dynamic';
 
+export interface StockSymbol {
+  symbol: string;
+  name: string;
+  exchange: string;
+}
+
 export async function GET() {
   try {
-    if (!ALPHA_VANTAGE_API_KEY) {
-      console.error('ALPHA_VANTAGE_API_KEY is not configured');
-      return NextResponse.json(
-        { error: 'APIキーが設定されていません' },
-        { status: 500 }
-      );
-    }
+    // 静的な人気銘柄リストを返す
+    const symbols: StockSymbol[] = popularStocks.map(stock => ({
+      symbol: stock.symbol,
+      name: stock.name,
+      exchange: stock.exchange
+    }));
 
-    // キャッシュからシンボルを取得（必要に応じて更新）
-    const symbols = await getCachedSymbols(async () => {
-      return await fetchSymbolsFromAlphaVantage(ALPHA_VANTAGE_API_KEY!);
-    });
+    console.log(`[SymbolsAPI] Returning ${symbols.length} stock symbols`);
 
     return NextResponse.json({
       symbols,
-      count: symbols.length
+      count: symbols.length,
+      source: 'static'
     });
 
   } catch (error) {

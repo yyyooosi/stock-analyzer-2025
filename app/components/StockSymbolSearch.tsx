@@ -6,7 +6,6 @@ export interface StockSearchResult {
   symbol: string;
   name: string;
   exchange: string;
-  assetType: string;
 }
 
 interface StockSymbolSearchProps {
@@ -56,8 +55,7 @@ export default function StockSymbolSearch({
         const symbols: StockSearchResult[] = data.symbols.map((s: any) => ({
           symbol: s.symbol,
           name: s.name,
-          exchange: s.exchange,
-          assetType: s.assetType
+          exchange: s.exchange
         }));
 
         setAllSymbols(symbols);
