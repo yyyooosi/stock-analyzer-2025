@@ -211,7 +211,7 @@ export function findSimilarPatterns(
     ema: { ema12: number[]; ema26: number[] };
     bollingerBands: { upper: number[]; middle: number[]; lower: number[] };
   },
-  minSimilarity: number = 70 // 最低類似度（0-100）
+  minSimilarity: number = 50 // 最低類似度（0-100）- デフォルトを50%に下げて検出しやすく
 ): PatternAnalysisResult {
   // 最新の指標を取得
   const currentIndex = priceData.length - 1;
@@ -234,10 +234,10 @@ export function findSimilarPatterns(
 
   const similarPatterns: SimilarPattern[] = [];
 
-  // 過去のデータをスキャン（最新から50日前まではスキップして、それより前を分析）
-  // これにより、将来のデータが十分に存在する期間を分析できる
-  const lookbackStart = Math.max(0, currentIndex - 100); // 最大100日前まで
-  const lookbackEnd = currentIndex - 10; // 最低10日前まで（将来のデータを確保）
+  // 過去のデータをスキャン
+  // 7日後の予測をするため、最低7日分の将来データが必要
+  const lookbackStart = 0; // データの最初から検索
+  const lookbackEnd = Math.max(0, currentIndex - 7); // 7日分の将来データを確保
 
   for (let i = lookbackStart; i < lookbackEnd; i++) {
     // 指標が有効な値かチェック
@@ -288,11 +288,20 @@ export function findSimilarPatterns(
   // 類似度でソート
   similarPatterns.sort((a, b) => b.similarity - a.similarity);
 
+  // パターンが見つからない場合、段階的に閾値を下げて再検索
+  if (similarPatterns.length === 0 && minSimilarity > 30) {
+    console.log(`類似度${minSimilarity}%でパターンが見つかりませんでした。閾値を下げて再検索します...`);
+
+    // 閾値を10%ずつ下げて再検索（最低30%まで）
+    const lowerThreshold = Math.max(30, minSimilarity - 10);
+    return findSimilarPatterns(priceData, indicators, lowerThreshold);
+  }
+
   // 予測を計算
   const prediction = calculatePrediction(similarPatterns);
 
   // サマリーを生成
-  const summary = generateSummary(similarPatterns, prediction);
+  const summary = generateSummary(similarPatterns, prediction, minSimilarity);
 
   return {
     currentIndicators,
@@ -363,15 +372,24 @@ function calculatePrediction(patterns: SimilarPattern[]): PatternAnalysisResult[
  */
 function generateSummary(
   patterns: SimilarPattern[],
-  prediction: PatternAnalysisResult['prediction']
+  prediction: PatternAnalysisResult['prediction'],
+  usedSimilarity?: number
 ): string {
   if (patterns.length === 0) {
-    return '現在の指標と類似する過去のパターンが見つかりませんでした。データ期間を延長するか、類似度の閾値を下げることをお勧めします。';
+    return '現在の指標と類似する過去のパターンが見つかりませんでした。データ期間が不足しているか、現在の市場状況が独特である可能性があります。';
   }
 
   const { averageReturn7Day, successRate, confidence } = prediction;
 
-  let summary = `${patterns.length}件の類似パターンを検出しました（信頼度: ${confidence.toFixed(0)}%）。\n\n`;
+  let summary = `${patterns.length}件の類似パターンを検出しました`;
+
+  // 類似度閾値が50%未満の場合は明示
+  if (usedSimilarity && usedSimilarity < 50) {
+    summary += `（類似度${usedSimilarity}%以上、信頼度: ${confidence.toFixed(0)}%）。\n\n`;
+    summary += `⚠️ 類似度の閾値を${usedSimilarity}%まで下げて検索しました。参考程度にご利用ください。\n\n`;
+  } else {
+    summary += `（信頼度: ${confidence.toFixed(0)}%）。\n\n`;
+  }
 
   if (successRate >= 70) {
     summary += `📈 過去の類似パターンでは、7日後に${successRate.toFixed(0)}%の確率で株価が上昇しています（平均${averageReturn7Day > 0 ? '+' : ''}${averageReturn7Day.toFixed(2)}%）。`;
