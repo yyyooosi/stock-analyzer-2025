@@ -14,16 +14,34 @@ export default async function Navigation() {
             </Link>
             <div className="flex space-x-4">
               <Link
+                href="/dashboard"
+                className="px-3 py-2 rounded-md text-sm font-medium transition-colors text-gray-300 hover:bg-gray-700 hover:text-white"
+              >
+                ダッシュボード
+              </Link>
+              <Link
+                href="/screener"
+                className="px-3 py-2 rounded-md text-sm font-medium transition-colors text-gray-300 hover:bg-gray-700 hover:text-white"
+              >
+                スクリーニング
+              </Link>
+              <Link
+                href="/results"
+                className="px-3 py-2 rounded-md text-sm font-medium transition-colors text-gray-300 hover:bg-gray-700 hover:text-white"
+              >
+                銘柄一覧
+              </Link>
+              <Link
                 href="/"
                 className="px-3 py-2 rounded-md text-sm font-medium transition-colors text-gray-300 hover:bg-gray-700 hover:text-white"
               >
-                ホーム
+                銘柄分析
               </Link>
               <Link
                 href="/watchlist"
                 className="px-3 py-2 rounded-md text-sm font-medium transition-colors text-gray-300 hover:bg-gray-700 hover:text-white"
               >
-                マイウォッチリスト
+                ウォッチリスト
               </Link>
             </div>
           </div>
