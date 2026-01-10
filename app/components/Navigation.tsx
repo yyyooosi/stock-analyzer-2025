@@ -20,6 +20,12 @@ export default async function Navigation() {
                 ホーム
               </Link>
               <Link
+                href="/screener"
+                className="px-3 py-2 rounded-md text-sm font-medium transition-colors text-gray-300 hover:bg-gray-700 hover:text-white"
+              >
+                スクリーニング
+              </Link>
+              <Link
                 href="/watchlist"
                 className="px-3 py-2 rounded-md text-sm font-medium transition-colors text-gray-300 hover:bg-gray-700 hover:text-white"
               >
