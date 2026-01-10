@@ -48,6 +48,8 @@ function HomeContent() {
   const [error, setError] = useState<string | null>(null);
   const [useRealData, setUseRealData] = useState(true);
   const [dataSource, setDataSource] = useState<'real' | 'demo'>('real');
+  const [isFallbackData, setIsFallbackData] = useState(false);
+  const [fallbackReason, setFallbackReason] = useState<string | null>(null);
   const [inWatchlist, setInWatchlist] = useState(false);
   const [watchlistMessage, setWatchlistMessage] = useState<string | null>(null);
 
@@ -70,12 +72,16 @@ function HomeContent() {
     setError(null);
     setBacktestResult(null);
     setCrashPrediction(null);
+    setIsFallbackData(false);
+    setFallbackReason(null);
 
     try {
-      const { stock, chart } = await fetchStockData(symbol, useRealData);
+      const { stock, chart, isFallback, fallbackReason: reason } = await fetchStockData(symbol, useRealData);
 
       setStockData(stock);
       setChartData(chart);
+      setIsFallbackData(isFallback || false);
+      setFallbackReason(reason || null);
 
       // テクニカル指標の計算
       const indicators = calculateAllIndicators(chart);
@@ -292,6 +298,22 @@ function HomeContent() {
         {error && (
           <div className="bg-red-900 border border-red-700 text-red-200 px-4 py-3 rounded-lg mb-6">
             {error}
+          </div>
+        )}
+
+        {/* フォールバックデータ通知 */}
+        {isFallbackData && (
+          <div className="bg-yellow-900 border border-yellow-700 text-yellow-200 px-4 py-3 rounded-lg mb-6">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">⚠️</span>
+              <div>
+                <p className="font-semibold">サンプルデータを表示しています</p>
+                <p className="text-sm text-yellow-300">
+                  実データの取得に失敗したため、デモ用のサンプルデータを表示しています。
+                  {fallbackReason && ` (理由: ${fallbackReason})`}
+                </p>
+              </div>
+            </div>
           </div>
         )}
 
