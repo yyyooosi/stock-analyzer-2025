@@ -55,7 +55,7 @@ const BACKEND_API_BASE = '/api/stock';
 // APIレート制限管理
 class RateLimiter {
   private requests: number[] = [];
-  private readonly maxRequests = 5; // 1分間に5回まで
+  private readonly maxRequests = 25; // Alpha Vantageの1日の制限に合わせて調整
   private readonly timeWindow = 60000; // 1分 = 60秒
 
   canMakeRequest(): boolean {
@@ -75,6 +75,15 @@ class RateLimiter {
     const waitTime = this.timeWindow - (Date.now() - oldestRequest);
     return Math.max(0, waitTime);
   }
+
+  // レート制限を待機してからリクエストを許可
+  async waitForAvailability(): Promise<void> {
+    while (!this.canMakeRequest()) {
+      const waitTime = this.getWaitTime();
+      console.log(`レート制限: ${Math.ceil(waitTime / 1000)}秒待機中...`);
+      await new Promise(resolve => setTimeout(resolve, Math.min(waitTime + 100, 5000)));
+    }
+  }
 }
 
 const rateLimiter = new RateLimiter();
@@ -89,11 +98,8 @@ export class StockAPIError extends Error {
 
 // 実際の株価データを取得（バックエンド経由）
 export async function fetchRealStockData(symbol: string): Promise<StockData> {
-  // レート制限チェック
-  if (!rateLimiter.canMakeRequest()) {
-    const waitTime = rateLimiter.getWaitTime();
-    throw new StockAPIError(`APIレート制限に達しました。${Math.ceil(waitTime / 1000)}秒後に再試行してください。`);
-  }
+  // レート制限チェック - 必要に応じて待機
+  await rateLimiter.waitForAvailability();
 
   try {
     rateLimiter.recordRequest();
@@ -143,11 +149,8 @@ export async function fetchRealStockData(symbol: string): Promise<StockData> {
 
 // 履歴データ（チャート用）を取得（バックエンド経由）
 export async function fetchRealChartData(symbol: string): Promise<ChartData[]> {
-  // レート制限チェック
-  if (!rateLimiter.canMakeRequest()) {
-    const waitTime = rateLimiter.getWaitTime();
-    throw new StockAPIError(`APIレート制限に達しました。${Math.ceil(waitTime / 1000)}秒後に再試行してください。`);
-  }
+  // レート制限チェック - 必要に応じて待機
+  await rateLimiter.waitForAvailability();
 
   try {
     rateLimiter.recordRequest();
