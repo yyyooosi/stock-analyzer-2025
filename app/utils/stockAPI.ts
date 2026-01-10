@@ -303,21 +303,41 @@ export function generateSampleData(symbol: string): { stock: StockData; chart: C
   return { stock, chart: chartDataArray };
 }
 
+// 統合データ取得関数の戻り値の型
+export interface FetchStockDataResult {
+  stock: StockData;
+  chart: ChartData[];
+  isFallback?: boolean;
+  fallbackReason?: string;
+}
+
 // 統合データ取得関数（実データ → フォールバック → サンプルデータ）
-export async function fetchStockData(symbol: string, useRealData: boolean = true): Promise<{ stock: StockData; chart: ChartData[] }> {
+export async function fetchStockData(symbol: string, useRealData: boolean = true): Promise<FetchStockDataResult> {
   if (!useRealData) {
     console.log('デモモードでサンプルデータを使用中...');
-    return generateSampleData(symbol);
+    return { ...generateSampleData(symbol), isFallback: false };
   }
 
   console.log(`実データを取得中: ${symbol}`);
 
-  // 並行して株価データと履歴データを取得
-  const [stockData, chartData] = await Promise.all([
-    fetchRealStockData(symbol),
-    fetchRealChartData(symbol)
-  ]);
+  try {
+    // 並行して株価データと履歴データを取得
+    const [stockData, chartData] = await Promise.all([
+      fetchRealStockData(symbol),
+      fetchRealChartData(symbol)
+    ]);
 
-  console.log('実データの取得が完了しました');
-  return { stock: stockData, chart: chartData };
+    console.log('実データの取得が完了しました');
+    return { stock: stockData, chart: chartData, isFallback: false };
+  } catch (error) {
+    // API取得に失敗した場合、サンプルデータにフォールバック
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.warn(`実データの取得に失敗しました: ${errorMessage}`);
+    console.log('サンプルデータにフォールバックします...');
+    return {
+      ...generateSampleData(symbol),
+      isFallback: true,
+      fallbackReason: errorMessage
+    };
+  }
 }
