@@ -1,4 +1,7 @@
-import yahooFinance from 'yahoo-finance2';
+import YahooFinance from 'yahoo-finance2';
+
+// Create Yahoo Finance instance (required for v3)
+const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
 
 export interface YahooQuoteResult {
   symbol: string;
@@ -66,25 +69,20 @@ export async function fetchYahooHistorical(
     interval: '1d',
   });
 
-  if (!historical || typeof historical !== 'object') {
+  if (!historical || !historical.quotes || historical.quotes.length === 0) {
     throw new Error(`No historical data found for symbol: ${symbol}`);
   }
 
-  const h = historical as Record<string, unknown>;
-  const quotes = h.quotes as Array<Record<string, unknown>> | undefined;
-
-  if (!quotes || !Array.isArray(quotes) || quotes.length === 0) {
-    throw new Error(`No historical data found for symbol: ${symbol}`);
-  }
-
-  return quotes
+  return historical.quotes
     .filter((item) => item.close !== null && item.open !== null)
     .map((item) => ({
-      date: new Date(item.date as Date).toISOString().split('T')[0],
-      open: (item.open as number) || 0,
-      high: (item.high as number) || 0,
-      low: (item.low as number) || 0,
-      close: (item.close as number) || 0,
-      volume: (item.volume as number) || 0,
+      date: item.date
+        ? new Date(item.date).toISOString().split('T')[0]
+        : new Date().toISOString().split('T')[0],
+      open: item.open || 0,
+      high: item.high || 0,
+      low: item.low || 0,
+      close: item.close || 0,
+      volume: item.volume || 0,
     }));
 }
