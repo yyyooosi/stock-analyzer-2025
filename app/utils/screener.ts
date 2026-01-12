@@ -12,31 +12,56 @@ export interface ScreenerFilters {
   epsGrowth3YMin?: number;
   epsGrowth5YMin?: number;
   revenueGrowthMin?: number;
+  revenueGrowthMax?: number;
   operatingMarginMin?: number;
+  grossMarginMin?: number;
+
+  // Advanced valuation
+  forwardPERMin?: number;
+  forwardPERMax?: number;
+  evEbitdaMin?: number;
+  evEbitdaMax?: number;
 
   // Financial health
   equityRatioMin?: number;
   currentRatioMin?: number;
   debtRatioMax?: number;
+  debtToEquityMax?: number;
   operatingCFPositive?: boolean;
+  freeCashFlowPositive?: boolean;
+  freeCashFlow3YPositive?: boolean;
+
+  // Growth & Innovation
+  rdExpenseRatioMin?: number;
+  rdExpenseRatioMax?: number;
 
   // Dividend conditions
   dividendYieldMin?: number;
   dividendYieldMax?: number;
   consecutiveDividendYearsMin?: number;
   payoutRatioMax?: number;
+  payoutRatioMin?: number;
 
   // Technical conditions
   aboveSMA50?: boolean;
   aboveSMA200?: boolean;
+  goldenCross?: boolean; // 50日MA > 200日MA
   rsiMin?: number;
   rsiMax?: number;
   macdBullish?: boolean;
   volumeIncreasePercent?: number;
+  week52HighDistanceMax?: number; // 52週高値からの距離（%）
+
+  // Twitter/X sentiment
+  twitterMentionTrendPositive?: boolean;
+  twitterSentimentFilter?: 'positive' | 'neutral' | 'negative' | 'any';
+  excludeNegativeKeywords?: boolean;
 
   // Other
   marketCapMin?: number;
   marketCapMax?: number;
+  marketCapUSDMin?: number;
+  marketCapUSDMax?: number;
   sectors?: string[];
   themes?: string[];
 }
@@ -47,6 +72,7 @@ export interface StockFundamentals {
   sector: string;
   industry: string;
   marketCap: number;
+  marketCapUSD: number;
   price: number;
   change: number;
   changePercent: number;
@@ -56,6 +82,8 @@ export interface StockFundamentals {
   pbr: number | null;
   peg: number | null;
   psRatio: number | null;
+  forwardPER: number | null;
+  evEbitda: number | null;
 
   // Growth
   roe: number | null;
@@ -63,12 +91,17 @@ export interface StockFundamentals {
   epsGrowth5Y: number | null;
   revenueGrowth: number | null;
   operatingMargin: number | null;
+  grossMargin: number | null;
+  rdExpenseRatio: number | null;
 
   // Financial health
   equityRatio: number | null;
   currentRatio: number | null;
   debtRatio: number | null;
+  debtToEquity: number | null;
   operatingCF: number | null;
+  freeCashFlow: number | null;
+  freeCashFlow3YTrend: 'positive' | 'negative' | 'neutral' | null;
 
   // Dividend
   dividendYield: number | null;
@@ -81,6 +114,14 @@ export interface StockFundamentals {
   rsi: number | null;
   macdSignal: 'bullish' | 'bearish' | 'neutral';
   volumeChange: number | null;
+  week52High: number | null;
+  week52HighDistance: number | null; // 52週高値からの距離（%）
+
+  // Twitter/X sentiment
+  twitterMentionCount30d: number | null;
+  twitterMentionTrend: 'increasing' | 'decreasing' | 'stable' | null;
+  twitterSentiment: 'positive' | 'neutral' | 'negative' | null;
+  hasNegativeKeywords: boolean;
 }
 
 export interface ScoreBreakdown {
@@ -335,11 +376,59 @@ export function matchesFilters(
     (stock.revenueGrowth === null || stock.revenueGrowth < filters.revenueGrowthMin)
   )
     return false;
+  if (
+    filters.revenueGrowthMax !== undefined &&
+    (stock.revenueGrowth === null || stock.revenueGrowth > filters.revenueGrowthMax)
+  )
+    return false;
 
   // Operating Margin
   if (
     filters.operatingMarginMin !== undefined &&
     (stock.operatingMargin === null || stock.operatingMargin < filters.operatingMarginMin)
+  )
+    return false;
+
+  // Gross Margin
+  if (
+    filters.grossMarginMin !== undefined &&
+    (stock.grossMargin === null || stock.grossMargin < filters.grossMarginMin)
+  )
+    return false;
+
+  // Forward PER
+  if (
+    filters.forwardPERMin !== undefined &&
+    (stock.forwardPER === null || stock.forwardPER < filters.forwardPERMin)
+  )
+    return false;
+  if (
+    filters.forwardPERMax !== undefined &&
+    (stock.forwardPER === null || stock.forwardPER > filters.forwardPERMax)
+  )
+    return false;
+
+  // EV/EBITDA
+  if (
+    filters.evEbitdaMin !== undefined &&
+    (stock.evEbitda === null || stock.evEbitda < filters.evEbitdaMin)
+  )
+    return false;
+  if (
+    filters.evEbitdaMax !== undefined &&
+    (stock.evEbitda === null || stock.evEbitda > filters.evEbitdaMax)
+  )
+    return false;
+
+  // R&D Expense Ratio
+  if (
+    filters.rdExpenseRatioMin !== undefined &&
+    (stock.rdExpenseRatio === null || stock.rdExpenseRatio < filters.rdExpenseRatioMin)
+  )
+    return false;
+  if (
+    filters.rdExpenseRatioMax !== undefined &&
+    (stock.rdExpenseRatio === null || stock.rdExpenseRatio > filters.rdExpenseRatioMax)
   )
     return false;
 
@@ -359,7 +448,19 @@ export function matchesFilters(
     (stock.debtRatio === null || stock.debtRatio > filters.debtRatioMax)
   )
     return false;
+  if (
+    filters.debtToEquityMax !== undefined &&
+    (stock.debtToEquity === null || stock.debtToEquity > filters.debtToEquityMax)
+  )
+    return false;
   if (filters.operatingCFPositive && (stock.operatingCF === null || stock.operatingCF <= 0))
+    return false;
+  if (filters.freeCashFlowPositive && (stock.freeCashFlow === null || stock.freeCashFlow <= 0))
+    return false;
+  if (
+    filters.freeCashFlow3YPositive &&
+    stock.freeCashFlow3YTrend !== 'positive'
+  )
     return false;
 
   // Dividend
@@ -384,10 +485,20 @@ export function matchesFilters(
     (stock.payoutRatio === null || stock.payoutRatio > filters.payoutRatioMax)
   )
     return false;
+  if (
+    filters.payoutRatioMin !== undefined &&
+    (stock.payoutRatio === null || stock.payoutRatio < filters.payoutRatioMin)
+  )
+    return false;
 
   // Technical
   if (filters.aboveSMA50 && (stock.sma50 === null || stock.price <= stock.sma50)) return false;
   if (filters.aboveSMA200 && (stock.sma200 === null || stock.price <= stock.sma200)) return false;
+  if (
+    filters.goldenCross &&
+    (stock.sma50 === null || stock.sma200 === null || stock.sma50 <= stock.sma200)
+  )
+    return false;
   if (filters.rsiMin !== undefined && (stock.rsi === null || stock.rsi < filters.rsiMin))
     return false;
   if (filters.rsiMax !== undefined && (stock.rsi === null || stock.rsi > filters.rsiMax))
@@ -398,10 +509,31 @@ export function matchesFilters(
     (stock.volumeChange === null || stock.volumeChange < filters.volumeIncreasePercent)
   )
     return false;
+  if (
+    filters.week52HighDistanceMax !== undefined &&
+    (stock.week52HighDistance === null ||
+      Math.abs(stock.week52HighDistance) > filters.week52HighDistanceMax)
+  )
+    return false;
 
   // Market Cap
   if (filters.marketCapMin !== undefined && stock.marketCap < filters.marketCapMin) return false;
   if (filters.marketCapMax !== undefined && stock.marketCap > filters.marketCapMax) return false;
+  if (filters.marketCapUSDMin !== undefined && stock.marketCapUSD < filters.marketCapUSDMin)
+    return false;
+  if (filters.marketCapUSDMax !== undefined && stock.marketCapUSD > filters.marketCapUSDMax)
+    return false;
+
+  // Twitter/X Sentiment
+  if (filters.twitterMentionTrendPositive && stock.twitterMentionTrend !== 'increasing')
+    return false;
+  if (
+    filters.twitterSentimentFilter &&
+    filters.twitterSentimentFilter !== 'any' &&
+    stock.twitterSentiment !== filters.twitterSentimentFilter
+  )
+    return false;
+  if (filters.excludeNegativeKeywords && stock.hasNegativeKeywords) return false;
 
   // Sector
   if (filters.sectors && filters.sectors.length > 0 && !filters.sectors.includes(stock.sector))
@@ -412,6 +544,7 @@ export function matchesFilters(
 
 // Preset filters
 export const PRESET_FILTERS = {
+  // 既存のプリセット（基本4つ）
   growth: {
     name: '成長株',
     description: '高成長・高ROE銘柄',
@@ -448,6 +581,80 @@ export const PRESET_FILTERS = {
       currentRatioMin: 1.5,
       debtRatioMax: 50,
       operatingCFPositive: true,
+    } as ScreenerFilters,
+  },
+
+  // 新規プリセット（X情報込み・プロ投資家向け）
+  growthPro: {
+    name: '王道成長株',
+    description: 'プロ投資家が最も使う長期成長型（X情報込み）',
+    filters: {
+      marketCapUSDMin: 10000000000, // 10B USD
+      revenueGrowthMin: 10,
+      epsGrowth3YMin: 12,
+      roeMin: 15,
+      operatingMarginMin: 15,
+      freeCashFlow3YPositive: true,
+      debtToEquityMax: 1.0,
+      forwardPERMin: 20,
+      forwardPERMax: 35,
+      pegMax: 1.5,
+      aboveSMA200: true,
+      goldenCross: true,
+      week52HighDistanceMax: 20,
+      twitterMentionTrendPositive: true,
+      excludeNegativeKeywords: true,
+    } as ScreenerFilters,
+  },
+  valueRecovery: {
+    name: '割安回復株',
+    description: '割安×回復狙い（リバウンド・ターンアラウンド）',
+    filters: {
+      marketCapUSDMin: 2000000000, // 2B USD
+      revenueGrowthMax: -10, // マイナス10%以内OK
+      equityRatioMin: 30,
+      perMax: 15,
+      pbrMax: 2,
+      evEbitdaMax: 10,
+      rsiMin: 30,
+      rsiMax: 45,
+      twitterSentimentFilter: 'neutral',
+    } as ScreenerFilters,
+  },
+  themeGrowth: {
+    name: 'テーマ急成長',
+    description: 'テーマ株・急成長セクター（AI/半導体/エネルギー等）',
+    filters: {
+      revenueGrowthMin: 20,
+      grossMarginMin: 40,
+      week52HighDistanceMax: 10,
+      volumeIncreasePercent: 100,
+      twitterMentionTrendPositive: true,
+      excludeNegativeKeywords: true,
+    } as ScreenerFilters,
+  },
+  dividendDefensive: {
+    name: '配当守備株',
+    description: '配当・ディフェンシブ（守りの米国株）',
+    filters: {
+      dividendYieldMin: 3,
+      payoutRatioMax: 60,
+      operatingCFPositive: true,
+      freeCashFlowPositive: true,
+      perMax: 20,
+      twitterSentimentFilter: 'positive',
+    } as ScreenerFilters,
+  },
+  qualityFilter: {
+    name: '地雷除外',
+    description: 'X情報で地雷銘柄を除外（超重要フィルター）',
+    filters: {
+      excludeNegativeKeywords: true,
+      twitterSentimentFilter: 'positive',
+      operatingCFPositive: true,
+      freeCashFlowPositive: true,
+      debtToEquityMax: 1.5,
+      equityRatioMin: 30,
     } as ScreenerFilters,
   },
 };

@@ -163,24 +163,28 @@ export default function ScreenerPage() {
             {/* Presets */}
             <div className="bg-gray-800 rounded-lg p-4">
               <h3 className="font-semibold mb-3">プリセット</h3>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
                 {Object.entries(PRESET_FILTERS).map(([key, preset]) => (
                   <button
                     key={key}
                     onClick={() => applyPreset(key)}
-                    className={`px-3 py-2 rounded text-sm transition-colors ${
+                    className={`w-full px-3 py-2 rounded text-xs transition-colors text-left ${
                       activePreset === key
                         ? 'bg-blue-600 text-white'
                         : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
                     }`}
+                    title={preset.description}
                   >
-                    {preset.name}
+                    <div className="font-semibold">{preset.name}</div>
+                    <div className="text-[10px] opacity-75 mt-0.5 truncate">
+                      {preset.description}
+                    </div>
                   </button>
                 ))}
               </div>
               <button
                 onClick={clearFilters}
-                className="w-full mt-3 px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm text-gray-300"
+                className="w-full mt-3 px-3 py-2 bg-red-700 hover:bg-red-600 rounded text-sm text-white font-semibold"
               >
                 条件クリア
               </button>
@@ -368,6 +372,147 @@ export default function ScreenerPage() {
                     checked={filters.macdBullish}
                     onChange={(v) => updateFilter('macdBullish', v)}
                   />
+                </div>
+              )}
+            </div>
+
+            {/* Advanced Filters */}
+            <div className="bg-gray-800 rounded-lg overflow-hidden">
+              <button
+                onClick={() => toggleSection('advanced')}
+                className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-700"
+              >
+                <span className="font-semibold">高度な条件</span>
+                <span>{expandedSection === 'advanced' ? '−' : '+'}</span>
+              </button>
+              {expandedSection === 'advanced' && (
+                <div className="px-4 pb-4 space-y-3">
+                  <div className="text-xs text-gray-400 font-semibold">バリュエーション</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <FilterInput
+                      label="予想PER (最小)"
+                      value={filters.forwardPERMin}
+                      onChange={(v) => updateFilter('forwardPERMin', v)}
+                      step={0.1}
+                    />
+                    <FilterInput
+                      label="予想PER (最大)"
+                      value={filters.forwardPERMax}
+                      onChange={(v) => updateFilter('forwardPERMax', v)}
+                      step={0.1}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <FilterInput
+                      label="EV/EBITDA (最小)"
+                      value={filters.evEbitdaMin}
+                      onChange={(v) => updateFilter('evEbitdaMin', v)}
+                      step={0.1}
+                    />
+                    <FilterInput
+                      label="EV/EBITDA (最大)"
+                      value={filters.evEbitdaMax}
+                      onChange={(v) => updateFilter('evEbitdaMax', v)}
+                      step={0.1}
+                    />
+                  </div>
+                  <FilterInput
+                    label="粗利率 (最小 %)"
+                    value={filters.grossMarginMin}
+                    onChange={(v) => updateFilter('grossMarginMin', v)}
+                  />
+                  <div className="text-xs text-gray-400 font-semibold mt-3">財務</div>
+                  <FilterInput
+                    label="D/Eレシオ (最大)"
+                    value={filters.debtToEquityMax}
+                    onChange={(v) => updateFilter('debtToEquityMax', v)}
+                    step={0.1}
+                  />
+                  <FilterCheckbox
+                    label="FCF プラスのみ"
+                    checked={filters.freeCashFlowPositive}
+                    onChange={(v) => updateFilter('freeCashFlowPositive', v)}
+                  />
+                  <FilterCheckbox
+                    label="FCF 3年連続プラス"
+                    checked={filters.freeCashFlow3YPositive}
+                    onChange={(v) => updateFilter('freeCashFlow3YPositive', v)}
+                  />
+                  <div className="text-xs text-gray-400 font-semibold mt-3">テクニカル</div>
+                  <FilterCheckbox
+                    label="ゴールデンクロス (50日>200日)"
+                    checked={filters.goldenCross}
+                    onChange={(v) => updateFilter('goldenCross', v)}
+                  />
+                  <FilterInput
+                    label="52週高値からの距離 (最大 %)"
+                    value={filters.week52HighDistanceMax}
+                    onChange={(v) => updateFilter('week52HighDistanceMax', v)}
+                  />
+                  <div className="text-xs text-gray-400 font-semibold mt-3">時価総額（USD）</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <FilterInput
+                      label="最小 (USD)"
+                      value={filters.marketCapUSDMin}
+                      onChange={(v) => updateFilter('marketCapUSDMin', v)}
+                      placeholder="例: 10000000000"
+                    />
+                    <FilterInput
+                      label="最大 (USD)"
+                      value={filters.marketCapUSDMax}
+                      onChange={(v) => updateFilter('marketCapUSDMax', v)}
+                      placeholder="例: 100000000000"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Twitter/X Sentiment Filter */}
+            <div className="bg-gray-800 rounded-lg overflow-hidden border-2 border-blue-500">
+              <button
+                onClick={() => toggleSection('twitter')}
+                className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-700"
+              >
+                <span className="font-semibold">🐦 X (Twitter) 感情分析</span>
+                <span>{expandedSection === 'twitter' ? '−' : '+'}</span>
+              </button>
+              {expandedSection === 'twitter' && (
+                <div className="px-4 pb-4 space-y-3">
+                  <FilterCheckbox
+                    label="メンション数が増加傾向"
+                    checked={filters.twitterMentionTrendPositive}
+                    onChange={(v) => updateFilter('twitterMentionTrendPositive', v)}
+                  />
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs text-gray-400">感情フィルター</label>
+                    <select
+                      value={filters.twitterSentimentFilter || 'any'}
+                      onChange={(e) =>
+                        updateFilter(
+                          'twitterSentimentFilter',
+                          e.target.value === 'any'
+                            ? undefined
+                            : (e.target.value as 'positive' | 'neutral' | 'negative')
+                        )
+                      }
+                      className="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm text-white focus:outline-none focus:border-blue-500"
+                    >
+                      <option value="any">すべて</option>
+                      <option value="positive">ポジティブのみ</option>
+                      <option value="neutral">ニュートラルのみ</option>
+                      <option value="negative">ネガティブのみ</option>
+                    </select>
+                  </div>
+                  <FilterCheckbox
+                    label="⚠️ 地雷キーワードを除外"
+                    checked={filters.excludeNegativeKeywords}
+                    onChange={(v) => updateFilter('excludeNegativeKeywords', v)}
+                  />
+                  <div className="mt-2 p-2 bg-blue-900 bg-opacity-30 rounded text-[10px] text-blue-300">
+                    <strong>地雷キーワード:</strong> fraud, scam, lawsuit, SEC
+                    investigation等を除外
+                  </div>
                 </div>
               )}
             </div>

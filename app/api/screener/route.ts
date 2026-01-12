@@ -7,9 +7,52 @@ import {
   matchesFilters,
 } from '@/app/utils/screener';
 
+// Helper function to enrich stock data with new fields
+function enrichStockData(stock: Partial<StockFundamentals>): StockFundamentals {
+  const price = stock.price || 100;
+  const marketCap = stock.marketCap || 1000000000;
+
+  return {
+    ...stock,
+    // Ensure all new required fields are present
+    marketCapUSD: stock.marketCapUSD || marketCap,
+    forwardPER: stock.forwardPER || (stock.per ? stock.per * 0.95 : null),
+    evEbitda: stock.evEbitda || (stock.per ? stock.per * 0.8 : null),
+    grossMargin: stock.grossMargin || (stock.operatingMargin ? stock.operatingMargin! + 10 : null),
+    rdExpenseRatio:
+      stock.rdExpenseRatio ||
+      (stock.sector === 'Technology' ? Math.random() * 15 + 5 : Math.random() * 5),
+    debtToEquity:
+      stock.debtToEquity ||
+      (stock.debtRatio && stock.equityRatio
+        ? stock.debtRatio / stock.equityRatio
+        : stock.debtRatio
+          ? stock.debtRatio / 50
+          : null),
+    freeCashFlow: stock.freeCashFlow || (stock.operatingCF ? stock.operatingCF * 0.8 : null),
+    freeCashFlow3YTrend:
+      stock.freeCashFlow3YTrend || (stock.operatingCF && stock.operatingCF > 0 ? 'positive' : 'neutral'),
+    week52High: stock.week52High || price * 1.15,
+    week52HighDistance: stock.week52HighDistance || -((price * 1.15 - price) / (price * 1.15)) * 100,
+    twitterMentionCount30d:
+      stock.twitterMentionCount30d || Math.floor(Math.random() * 1000) + 100,
+    twitterMentionTrend:
+      stock.twitterMentionTrend ||
+      (['increasing', 'decreasing', 'stable'][
+        Math.floor(Math.random() * 3)
+      ] as 'increasing' | 'decreasing' | 'stable'),
+    twitterSentiment:
+      stock.twitterSentiment ||
+      (['positive', 'neutral', 'negative'][
+        Math.floor(Math.random() * 3)
+      ] as 'positive' | 'neutral' | 'negative'),
+    hasNegativeKeywords: stock.hasNegativeKeywords || Math.random() > 0.8,
+  } as StockFundamentals;
+}
+
 // Sample stock data for demonstration
 // In production, this would come from Financial APIs (FMP, Polygon, etc.)
-const SAMPLE_STOCKS: StockFundamentals[] = [
+const SAMPLE_STOCKS_RAW: Partial<StockFundamentals>[] = [
   {
     symbol: 'AAPL',
     name: 'Apple Inc.',
@@ -477,6 +520,9 @@ const SAMPLE_STOCKS: StockFundamentals[] = [
   },
 ];
 
+// Apply enrichment to add new fields
+const SAMPLE_STOCKS: StockFundamentals[] = SAMPLE_STOCKS_RAW.map(enrichStockData);
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -496,19 +542,32 @@ export async function GET(request: NextRequest) {
       'epsGrowth3YMin',
       'epsGrowth5YMin',
       'revenueGrowthMin',
+      'revenueGrowthMax',
       'operatingMarginMin',
+      'grossMarginMin',
+      'forwardPERMin',
+      'forwardPERMax',
+      'evEbitdaMin',
+      'evEbitdaMax',
+      'rdExpenseRatioMin',
+      'rdExpenseRatioMax',
       'equityRatioMin',
       'currentRatioMin',
       'debtRatioMax',
+      'debtToEquityMax',
       'dividendYieldMin',
       'dividendYieldMax',
       'consecutiveDividendYearsMin',
       'payoutRatioMax',
+      'payoutRatioMin',
       'rsiMin',
       'rsiMax',
       'volumeIncreasePercent',
+      'week52HighDistanceMax',
       'marketCapMin',
       'marketCapMax',
+      'marketCapUSDMin',
+      'marketCapUSDMax',
     ];
 
     for (const param of numericParams) {
@@ -519,12 +578,28 @@ export async function GET(request: NextRequest) {
     }
 
     // Parse boolean filters
-    const booleanParams = ['operatingCFPositive', 'aboveSMA50', 'aboveSMA200', 'macdBullish'];
+    const booleanParams = [
+      'operatingCFPositive',
+      'freeCashFlowPositive',
+      'freeCashFlow3YPositive',
+      'aboveSMA50',
+      'aboveSMA200',
+      'goldenCross',
+      'macdBullish',
+      'twitterMentionTrendPositive',
+      'excludeNegativeKeywords',
+    ];
     for (const param of booleanParams) {
       const value = searchParams.get(param);
       if (value !== null) {
         (filters as Record<string, boolean>)[param] = value === 'true';
       }
+    }
+
+    // Parse string enum filters
+    const twitterSentiment = searchParams.get('twitterSentimentFilter');
+    if (twitterSentiment && ['positive', 'neutral', 'negative', 'any'].includes(twitterSentiment)) {
+      filters.twitterSentimentFilter = twitterSentiment as 'positive' | 'neutral' | 'negative' | 'any';
     }
 
     // Parse array filters

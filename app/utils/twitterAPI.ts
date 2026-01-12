@@ -13,6 +13,8 @@ export interface Tweet {
     likeCount: number;
     quoteCount: number;
   };
+  sentiment?: 'positive' | 'neutral' | 'negative';
+  hasNegativeKeywords?: boolean;
 }
 
 export interface TwitterSearchResult {
@@ -29,6 +31,85 @@ export class TwitterAPIError extends Error {
   constructor(message: string, public statusCode?: number) {
     super(message);
     this.name = 'TwitterAPIError';
+  }
+}
+
+// ネガティブキーワードリスト（地雷検出用）
+const NEGATIVE_KEYWORDS = [
+  'fraud',
+  'scam',
+  'lawsuit',
+  'investigation',
+  'SEC investigation',
+  'accounting issue',
+  'accounting fraud',
+  'insider trading',
+  'bankruptcy',
+  'default',
+  'リーク',
+  '詐欺',
+  '訴訟',
+  '不正会計',
+  '破綻',
+  'plunge',
+  'crash',
+  '暴落',
+  '急落',
+];
+
+// ポジティブキーワードリスト
+const POSITIVE_KEYWORDS = [
+  'breakthrough',
+  'innovation',
+  'growth',
+  'bullish',
+  'upgrade',
+  'beat estimates',
+  'strong earnings',
+  'undervalued',
+  'turnaround',
+  'deep value',
+  '成長',
+  '革新',
+  '好調',
+  '上昇',
+  '割安',
+];
+
+// ネガティブキーワードが含まれているかチェック
+export function hasNegativeKeywords(text: string): boolean {
+  const lowerText = text.toLowerCase();
+  return NEGATIVE_KEYWORDS.some((keyword) => lowerText.includes(keyword.toLowerCase()));
+}
+
+// シンプルな感情分析（キーワードベース）
+export function analyzeSentiment(text: string): 'positive' | 'neutral' | 'negative' {
+  const lowerText = text.toLowerCase();
+
+  let positiveCount = 0;
+  let negativeCount = 0;
+
+  // ポジティブキーワードのカウント
+  POSITIVE_KEYWORDS.forEach((keyword) => {
+    if (lowerText.includes(keyword.toLowerCase())) {
+      positiveCount++;
+    }
+  });
+
+  // ネガティブキーワードのカウント
+  NEGATIVE_KEYWORDS.forEach((keyword) => {
+    if (lowerText.includes(keyword.toLowerCase())) {
+      negativeCount++;
+    }
+  });
+
+  // 感情スコアの計算
+  if (negativeCount > positiveCount) {
+    return 'negative';
+  } else if (positiveCount > negativeCount) {
+    return 'positive';
+  } else {
+    return 'neutral';
   }
 }
 
@@ -130,91 +211,142 @@ export async function searchCrashTweets(
 }
 
 /**
+ * ティッカーシンボルに関する投稿を検索（感情分析付き）
+ * @param symbol 株式シンボル（必須）
+ * @param maxResults 取得する最大ツイート数（デフォルト: 100）
+ */
+export async function searchTickerMentions(
+  symbol: string,
+  maxResults: number = 100
+): Promise<TwitterSearchResult> {
+  try {
+    // 検索クエリの構築（ティッカーシンボルのみ）
+    let query = `${symbol}`;
+
+    // リツイートを除外し、日本語または英語のツイートのみ
+    query += ' -is:retweet (lang:ja OR lang:en)';
+
+    // Next.js API Routeを経由してリクエスト
+    const params = new URLSearchParams({
+      query: query,
+      max_results: Math.min(maxResults, 100).toString(),
+    });
+
+    const url = `/api/twitter/search?${params.toString()}`;
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new TwitterAPIError(
+        `Twitter API Error: ${response.status} - ${errorData.error || errorData.message || 'Unknown error'}`,
+        response.status
+      );
+    }
+
+    const data = await response.json();
+
+    // レスポンスデータの変換
+    const tweets: Tweet[] = [];
+
+    if (data.data && Array.isArray(data.data)) {
+      // ユーザー情報のマッピング
+      const usersMap: { [id: string]: { username: string } } = {};
+      if (data.includes?.users) {
+        data.includes.users.forEach((user: any) => {
+          usersMap[user.id] = { username: user.username };
+        });
+      }
+
+      // ツイートデータの整形（感情分析付き）
+      data.data.forEach((tweet: any) => {
+        const tweetText = tweet.text;
+        tweets.push({
+          id: tweet.id,
+          text: tweetText,
+          authorId: tweet.author_id,
+          authorUsername: usersMap[tweet.author_id]?.username || 'unknown',
+          createdAt: tweet.created_at,
+          publicMetrics: {
+            retweetCount: tweet.public_metrics?.retweet_count || 0,
+            replyCount: tweet.public_metrics?.reply_count || 0,
+            likeCount: tweet.public_metrics?.like_count || 0,
+            quoteCount: tweet.public_metrics?.quote_count || 0,
+          },
+          sentiment: analyzeSentiment(tweetText),
+          hasNegativeKeywords: hasNegativeKeywords(tweetText),
+        });
+      });
+    }
+
+    return {
+      tweets,
+      meta: {
+        resultCount: data.meta?.result_count || 0,
+        newestId: data.meta?.newest_id || '',
+        oldestId: data.meta?.oldest_id || '',
+      },
+    };
+  } catch (error) {
+    if (error instanceof TwitterAPIError) {
+      throw error;
+    }
+    throw new TwitterAPIError(
+      `Twitter APIリクエストエラー: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
+  }
+}
+
+/**
  * デモモード用のサンプルツイートを生成
  */
 export function generateSampleTweets(symbol?: string): TwitterSearchResult {
-  const sampleTweets: Tweet[] = [
-    {
-      id: '1',
-      text: `${symbol || '米国株'}が暴落！今日の下落率は驚異的。投資家パニック状態。`,
-      authorId: 'demo1',
-      authorUsername: 'investor_demo1',
-      createdAt: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
-      publicMetrics: { retweetCount: 120, replyCount: 45, likeCount: 230, quoteCount: 15 }
-    },
-    {
-      id: '2',
-      text: `Market crash today! ${symbol || 'Stocks'} plummeting. Major concerns about the economy.`,
-      authorId: 'demo2',
-      authorUsername: 'trader_demo2',
-      createdAt: new Date(Date.now() - 1000 * 60 * 10).toISOString(),
-      publicMetrics: { retweetCount: 85, replyCount: 32, likeCount: 178, quoteCount: 8 }
-    },
-    {
-      id: '3',
-      text: `${symbol || '株価'}急落中。損失が拡大している。売り圧力が強い。`,
-      authorId: 'demo3',
-      authorUsername: 'market_watcher_demo',
-      createdAt: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
-      publicMetrics: { retweetCount: 55, replyCount: 18, likeCount: 95, quoteCount: 5 }
-    },
-    {
-      id: '4',
-      text: `This is terrible. ${symbol || 'Stock'} price is dropping fast. Huge selloff happening now.`,
-      authorId: 'demo4',
-      authorUsername: 'financial_news_demo',
-      createdAt: new Date(Date.now() - 1000 * 60 * 20).toISOString(),
-      publicMetrics: { retweetCount: 145, replyCount: 67, likeCount: 312, quoteCount: 22 }
-    },
-    {
-      id: '5',
-      text: `危険な状況。${symbol || '市場'}全体が下落トレンド。暴落の兆候が見られる。`,
-      authorId: 'demo5',
-      authorUsername: 'analyst_demo',
-      createdAt: new Date(Date.now() - 1000 * 60 * 25).toISOString(),
-      publicMetrics: { retweetCount: 73, replyCount: 28, likeCount: 156, quoteCount: 11 }
-    },
-    {
-      id: '6',
-      text: `Fear and panic in the market. ${symbol || 'Stocks'} crashing hard. Risk levels are high.`,
-      authorId: 'demo6',
-      authorUsername: 'risk_monitor_demo',
-      createdAt: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
-      publicMetrics: { retweetCount: 98, replyCount: 41, likeCount: 203, quoteCount: 14 }
-    },
-    {
-      id: '7',
-      text: `最悪の展開。${symbol || '株'}がさらに下落。投資家は損切りを検討すべき。`,
-      authorId: 'demo7',
-      authorUsername: 'portfolio_manager_demo',
-      createdAt: new Date(Date.now() - 1000 * 60 * 35).toISOString(),
-      publicMetrics: { retweetCount: 62, replyCount: 25, likeCount: 134, quoteCount: 7 }
-    },
-    {
-      id: '8',
-      text: `Warning: Major decline in ${symbol || 'stock'} prices. Market weakness evident.`,
-      authorId: 'demo8',
-      authorUsername: 'market_alert_demo',
-      createdAt: new Date(Date.now() - 1000 * 60 * 40).toISOString(),
-      publicMetrics: { retweetCount: 110, replyCount: 52, likeCount: 245, quoteCount: 18 }
-    },
-    {
-      id: '9',
-      text: `${symbol || '銘柄'}のチャートが崩壊中。ボリュームも増加。売られすぎ状態。`,
-      authorId: 'demo9',
-      authorUsername: 'chart_analyst_demo',
-      createdAt: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
-      publicMetrics: { retweetCount: 47, replyCount: 19, likeCount: 102, quoteCount: 6 }
-    },
-    {
-      id: '10',
-      text: `Bearish sentiment everywhere. ${symbol || 'Market'} looks weak. Expecting more downside.`,
-      authorId: 'demo10',
-      authorUsername: 'bear_trader_demo',
-      createdAt: new Date(Date.now() - 1000 * 60 * 50).toISOString(),
-      publicMetrics: { retweetCount: 81, replyCount: 34, likeCount: 167, quoteCount: 9 }
-    }
+  const sampleTexts = [
+    `${symbol || '米国株'}が暴落！今日の下落率は驚異的。投資家パニック状態。`,
+    `Market crash today! ${symbol || 'Stocks'} plummeting. Major concerns about the economy.`,
+    `${symbol || '株価'}急落中。損失が拡大している。売り圧力が強い。`,
+    `This is terrible. ${symbol || 'Stock'} price is dropping fast. Huge selloff happening now.`,
+    `危険な状況。${symbol || '市場'}全体が下落トレンド。暴落の兆候が見られる。`,
+    `Fear and panic in the market. ${symbol || 'Stocks'} crashing hard. Risk levels are high.`,
+    `最悪の展開。${symbol || '株'}がさらに下落。投資家は損切りを検討すべき。`,
+    `Warning: Major decline in ${symbol || 'stock'} prices. Market weakness evident.`,
+    `${symbol || '銘柄'}のチャートが崩壊中。ボリュームも増加。売られすぎ状態。`,
+    `Bearish sentiment everywhere. ${symbol || 'Market'} looks weak. Expecting more downside.`,
   ];
+
+  const usernames = [
+    'investor_demo1',
+    'trader_demo2',
+    'market_watcher_demo',
+    'financial_news_demo',
+    'analyst_demo',
+    'risk_monitor_demo',
+    'portfolio_manager_demo',
+    'market_alert_demo',
+    'chart_analyst_demo',
+    'bear_trader_demo',
+  ];
+
+  const sampleTweets: Tweet[] = sampleTexts.map((text, index) => ({
+    id: (index + 1).toString(),
+    text,
+    authorId: `demo${index + 1}`,
+    authorUsername: usernames[index],
+    createdAt: new Date(Date.now() - 1000 * 60 * (5 + index * 5)).toISOString(),
+    publicMetrics: {
+      retweetCount: Math.floor(Math.random() * 150) + 50,
+      replyCount: Math.floor(Math.random() * 70) + 15,
+      likeCount: Math.floor(Math.random() * 300) + 100,
+      quoteCount: Math.floor(Math.random() * 25) + 5,
+    },
+    sentiment: analyzeSentiment(text),
+    hasNegativeKeywords: hasNegativeKeywords(text),
+  }));
 
   return {
     tweets: sampleTweets,
