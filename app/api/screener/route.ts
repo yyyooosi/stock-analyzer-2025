@@ -6,6 +6,7 @@ import {
   calculateScore,
   matchesFilters,
 } from '@/app/utils/screener';
+import { fetchStockQuote } from '@/app/utils/stockQuote';
 
 // Helper function to enrich stock data with new fields
 function enrichStockData(stock: Partial<StockFundamentals>): StockFundamentals {
@@ -152,9 +153,9 @@ const SAMPLE_STOCKS_RAW: Partial<StockFundamentals>[] = [
     sector: 'Technology',
     industry: 'Semiconductors',
     marketCap: 1200000000000,
-    price: 485.5,
-    change: 12.35,
-    changePercent: 2.61,
+    price: 184.86,
+    change: -0.18,
+    changePercent: -0.10,
     per: 62.5,
     pbr: 38.5,
     peg: 0.9,
@@ -523,6 +524,39 @@ const SAMPLE_STOCKS_RAW: Partial<StockFundamentals>[] = [
 // Apply enrichment to add new fields
 const SAMPLE_STOCKS: StockFundamentals[] = SAMPLE_STOCKS_RAW.map(enrichStockData);
 
+/**
+ * リアルタイム株価を取得してサンプルデータを更新
+ * fetchStockQuote関数を使用（Alpha Vantage → Yahoo Finance フォールバック）
+ */
+async function updateStockPricesFromAPI(
+  stocks: StockFundamentals[]
+): Promise<StockFundamentals[]> {
+  const updatedStocks = await Promise.all(
+    stocks.map(async (stock) => {
+      try {
+        // 株価データを取得
+        const quote = await fetchStockQuote(stock.symbol);
+
+        // リアルタイム価格でサンプルデータを更新
+        return {
+          ...stock,
+          price: quote.price,
+          change: quote.change,
+          changePercent: quote.changePercent,
+        };
+      } catch (error) {
+        console.warn(
+          `Error fetching price for ${stock.symbol}:`,
+          error instanceof Error ? error.message : error
+        );
+        return stock; // エラー時はサンプルデータを使用
+      }
+    })
+  );
+
+  return updatedStocks;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -613,13 +647,18 @@ export async function GET(request: NextRequest) {
       filters.themes = themes.split(',');
     }
 
+    // リアルタイム株価を取得
+    console.log('[Screener] Fetching real-time prices...');
+    const stocksWithRealPrices = await updateStockPricesFromAPI(SAMPLE_STOCKS);
+    console.log('[Screener] Real-time prices fetched');
+
     // Filter and score stocks
-    const results: ScreenerResult[] = SAMPLE_STOCKS.filter((stock) =>
-      matchesFilters(stock, filters)
-    ).map((stock) => ({
-      ...stock,
-      score: calculateScore(stock),
-    }));
+    const results: ScreenerResult[] = stocksWithRealPrices
+      .filter((stock) => matchesFilters(stock, filters))
+      .map((stock) => ({
+        ...stock,
+        score: calculateScore(stock),
+      }));
 
     // Sort by total score (descending)
     results.sort((a, b) => b.score.total - a.score.total);
