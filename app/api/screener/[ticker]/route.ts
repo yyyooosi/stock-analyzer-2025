@@ -5,8 +5,51 @@ import {
   calculateScore,
 } from '@/app/utils/screener';
 
+// Helper function to enrich stock data with new fields
+function enrichStockData(stock: Partial<StockFundamentals>): StockFundamentals {
+  const price = stock.price || 100;
+  const marketCap = stock.marketCap || 1000000000;
+
+  return {
+    ...stock,
+    // Ensure all new required fields are present
+    marketCapUSD: stock.marketCapUSD || marketCap,
+    forwardPER: stock.forwardPER || (stock.per ? stock.per * 0.95 : null),
+    evEbitda: stock.evEbitda || (stock.per ? stock.per * 0.8 : null),
+    grossMargin: stock.grossMargin || (stock.operatingMargin ? stock.operatingMargin! + 10 : null),
+    rdExpenseRatio:
+      stock.rdExpenseRatio ||
+      (stock.sector === 'Technology' ? Math.random() * 15 + 5 : Math.random() * 5),
+    debtToEquity:
+      stock.debtToEquity ||
+      (stock.debtRatio && stock.equityRatio
+        ? stock.debtRatio / stock.equityRatio
+        : stock.debtRatio
+          ? stock.debtRatio / 50
+          : null),
+    freeCashFlow: stock.freeCashFlow || (stock.operatingCF ? stock.operatingCF * 0.8 : null),
+    freeCashFlow3YTrend:
+      stock.freeCashFlow3YTrend || (stock.operatingCF && stock.operatingCF > 0 ? 'positive' : 'neutral'),
+    week52High: stock.week52High || price * 1.15,
+    week52HighDistance: stock.week52HighDistance || -((price * 1.15 - price) / (price * 1.15)) * 100,
+    twitterMentionCount30d:
+      stock.twitterMentionCount30d || Math.floor(Math.random() * 1000) + 100,
+    twitterMentionTrend:
+      stock.twitterMentionTrend ||
+      (['increasing', 'decreasing', 'stable'][
+        Math.floor(Math.random() * 3)
+      ] as 'increasing' | 'decreasing' | 'stable'),
+    twitterSentiment:
+      stock.twitterSentiment ||
+      (['positive', 'neutral', 'negative'][
+        Math.floor(Math.random() * 3)
+      ] as 'positive' | 'neutral' | 'negative'),
+    hasNegativeKeywords: stock.hasNegativeKeywords || Math.random() > 0.8,
+  } as StockFundamentals;
+}
+
 // Sample stock data (same as in main screener route)
-const SAMPLE_STOCKS: StockFundamentals[] = [
+const SAMPLE_STOCKS_RAW: Partial<StockFundamentals>[] = [
   {
     symbol: 'AAPL',
     name: 'Apple Inc.',
@@ -473,6 +516,9 @@ const SAMPLE_STOCKS: StockFundamentals[] = [
     volumeChange: 12.5,
   },
 ];
+
+// Apply enrichment to add new fields
+const SAMPLE_STOCKS: StockFundamentals[] = SAMPLE_STOCKS_RAW.map(enrichStockData);
 
 // Get competitors in same sector
 function getCompetitors(stock: StockFundamentals, allStocks: StockFundamentals[]): ScreenerResult[] {
