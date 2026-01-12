@@ -10,291 +10,396 @@ import {
   calculateHistoricalSimilarity,
   CATEGORY_CONFIG,
 } from '@/app/utils/riskMonitor';
+import { fetchMacroEconomicData, fetchCreditSpread, fetchHYYield } from '@/app/utils/fredAPI';
+import {
+  fetchCAPE,
+  fetchPSR,
+  fetchBuffettIndicator,
+  fetchEarningsYieldSpread,
+  fetchVIX,
+  fetchIndexConcentration,
+  fetchLeveragedETFAssets,
+  fetchMarginDebt,
+} from '@/app/utils/marketData';
 
 /**
  * S&P500大暴落リスク監視API
- * 現在のリスク評価を返す
+ * 実際のデータソースから現在のリスク評価を返す
  */
 
-// サンプルデータ生成（実際のAPIと統合する前の暫定実装）
-function generateSampleIndicators(): {
+// 正規化スコア計算用の歴史的範囲
+const HISTORICAL_RANGES = {
+  cape: { min: 10, max: 45, threshold: 30, percentile90: 35 },
+  psr: { min: 0.5, max: 3.5, threshold: 2.5, percentile90: 3.0 },
+  buffettIndicator: { min: 50, max: 200, threshold: 120, percentile90: 160 },
+  earningsYieldSpread: { min: -3, max: 5, threshold: 0, percentile90: -1 },
+  fedFundsRate: { min: 0, max: 6, threshold: 5.0, percentile90: 5.5 },
+  creditSpread: { min: 0.5, max: 3.5, threshold: 2.0, percentile90: 2.5 },
+  hyYield: { min: 4, max: 12, threshold: 9.0, percentile90: 10 },
+  m2Growth: { min: -5, max: 15, threshold: 0, percentile90: -2 },
+  cpi: { min: 0, max: 8, threshold: 4.0, percentile90: 5 },
+  unemployment: { min: 3, max: 10, threshold: 4.5, percentile90: 5 },
+  yieldCurve: { min: -1.5, max: 3, threshold: 0, percentile90: -0.5 },
+  vix: { min: 10, max: 40, threshold: 20, percentile90: 25 },
+  indexConcentration: { min: 15, max: 40, threshold: 25, percentile90: 32 },
+  leveragedETF: { min: 20, max: 200, threshold: 100, percentile90: 150 },
+  marginDebt: { min: 200, max: 900, threshold: 600, percentile90: 750 },
+};
+
+/**
+ * 値を正規化スコアに変換
+ */
+function normalizeValue(
+  value: number,
+  range: { min: number; max: number; percentile90: number },
+  isHigherWorse: boolean = true
+): number {
+  if (isHigherWorse) {
+    if (value >= range.percentile90) return 90 + ((value - range.percentile90) / (range.max - range.percentile90)) * 10;
+    if (value <= range.min) return 0;
+    return ((value - range.min) / (range.max - range.min)) * 100;
+  } else {
+    // 値が低いほど危険な指標（例：イールドカーブ）
+    if (value <= range.min) return 100;
+    if (value >= range.max) return 0;
+    return ((range.max - value) / (range.max - range.min)) * 100;
+  }
+}
+
+/**
+ * パーセンタイルを計算
+ */
+function calculatePercentile(value: number, range: { min: number; max: number }): number {
+  if (value <= range.min) return 0;
+  if (value >= range.max) return 100;
+  return Math.round(((value - range.min) / (range.max - range.min)) * 100);
+}
+
+/**
+ * 実際のデータから指標を生成
+ */
+async function generateRealIndicators(): Promise<{
   valuation: RiskIndicator[];
   financial: RiskIndicator[];
   macro: RiskIndicator[];
   market: RiskIndicator[];
   sentiment: RiskIndicator[];
-} {
+} | null> {
   const now = new Date().toISOString();
+  const fredApiKey = process.env.FRED_API_KEY;
 
-  // バリュエーション指標
-  const valuation: RiskIndicator[] = [
-    {
-      id: 'cape',
-      category: 'valuation',
-      name: 'CAPE (Shiller PER)',
-      description: 'S&P500の景気調整後PER。過去10年の平均利益に基づく',
-      currentValue: 32.5,
-      normalizedScore: 75,
-      threshold: 30,
-      isWarning: true,
-      historicalPercentile: 85,
-      trend: 'stable',
-      lastUpdated: now,
-    },
-    {
-      id: 'psr',
-      category: 'valuation',
-      name: 'PSR (株価売上倍率)',
-      description: 'S&P500の時価総額を売上高で割った値',
-      currentValue: 2.8,
-      normalizedScore: 68,
-      threshold: 2.5,
-      isWarning: true,
-      historicalPercentile: 78,
-      trend: 'rising',
-      lastUpdated: now,
-    },
-    {
-      id: 'buffett-indicator',
-      category: 'valuation',
-      name: 'バフェット指数',
-      description: '米国株式時価総額をGDPで割った値',
-      currentValue: 185,
-      normalizedScore: 82,
-      threshold: 120,
-      isWarning: true,
-      historicalPercentile: 92,
-      trend: 'rising',
-      lastUpdated: now,
-    },
-    {
-      id: 'earnings-yield-spread',
-      category: 'valuation',
-      name: '株益利回りスプレッド',
-      description: 'S&P500益利回り - 10年国債利回り',
-      currentValue: -1.2,
-      normalizedScore: 55,
-      threshold: 0,
-      isWarning: false,
-      historicalPercentile: 62,
-      trend: 'falling',
-      lastUpdated: now,
-    },
-  ];
+  try {
+    // 並列でデータ取得
+    const [
+      macroData,
+      creditSpread,
+      hyYield,
+      cape,
+      psr,
+      buffettIndicator,
+      vix,
+      indexConcentration,
+      leveragedETF,
+      marginDebt,
+    ] = await Promise.all([
+      fetchMacroEconomicData(fredApiKey),
+      fetchCreditSpread(fredApiKey),
+      fetchHYYield(fredApiKey),
+      fetchCAPE(),
+      fetchPSR(),
+      fetchBuffettIndicator(fredApiKey),
+      fetchVIX(),
+      fetchIndexConcentration(),
+      fetchLeveragedETFAssets(),
+      fetchMarginDebt(fredApiKey),
+    ]);
 
-  // 金融・信用指標
-  const financial: RiskIndicator[] = [
-    {
-      id: 'fed-funds-rate',
-      category: 'financial',
-      name: 'FF金利',
-      description: '米国の政策金利',
-      currentValue: 5.33,
-      normalizedScore: 72,
-      threshold: 5.0,
-      isWarning: true,
-      historicalPercentile: 80,
-      trend: 'stable',
-      lastUpdated: now,
-    },
-    {
-      id: 'credit-spread',
-      category: 'financial',
-      name: 'クレジットスプレッド',
-      description: '投資適格社債と国債の利回り差',
-      currentValue: 1.45,
-      normalizedScore: 42,
-      threshold: 2.0,
-      isWarning: false,
-      historicalPercentile: 45,
-      trend: 'stable',
-      lastUpdated: now,
-    },
-    {
-      id: 'hy-yield',
-      category: 'financial',
-      name: 'HY債利回り',
-      description: 'ハイイールド債の利回り',
-      currentValue: 8.2,
-      normalizedScore: 58,
-      threshold: 9.0,
-      isWarning: false,
-      historicalPercentile: 65,
-      trend: 'rising',
-      lastUpdated: now,
-    },
-    {
-      id: 'm2-growth',
-      category: 'financial',
-      name: 'M2増加率',
-      description: 'マネーサプライの前年同月比増加率',
-      currentValue: -2.1,
-      normalizedScore: 65,
-      threshold: 0,
-      isWarning: true,
-      historicalPercentile: 88,
-      trend: 'falling',
-      lastUpdated: now,
-    },
-  ];
+    // データが十分に取得できない場合はnullを返す
+    if (!macroData) {
+      console.warn('Insufficient macro data, falling back to sample data');
+      return null;
+    }
 
-  // マクロ経済指標
-  const macro: RiskIndicator[] = [
-    {
-      id: 'cpi',
-      category: 'macro',
-      name: 'CPI (消費者物価指数)',
-      description: '前年同月比のインフレ率',
-      currentValue: 3.4,
-      normalizedScore: 58,
-      threshold: 4.0,
-      isWarning: false,
-      historicalPercentile: 70,
-      trend: 'falling',
-      lastUpdated: now,
-    },
-    {
-      id: 'unemployment',
-      category: 'macro',
-      name: '失業率',
-      description: '米国の失業率',
-      currentValue: 3.8,
-      normalizedScore: 35,
-      threshold: 4.5,
-      isWarning: false,
-      historicalPercentile: 30,
-      trend: 'rising',
-      lastUpdated: now,
-    },
-    {
-      id: 'ism-manufacturing',
-      category: 'macro',
-      name: 'ISM製造業指数',
-      description: '製造業の景況感を示す指数（50が分岐点）',
-      currentValue: 48.2,
-      normalizedScore: 62,
-      threshold: 50,
-      isWarning: true,
-      historicalPercentile: 68,
-      trend: 'falling',
-      lastUpdated: now,
-    },
-    {
-      id: 'yield-curve',
-      category: 'macro',
-      name: 'イールドカーブ',
-      description: '10年債利回り - 2年債利回り',
-      currentValue: -0.45,
-      normalizedScore: 78,
-      threshold: 0,
-      isWarning: true,
-      historicalPercentile: 85,
-      trend: 'stable',
-      lastUpdated: now,
-    },
-  ];
+    // バリュエーション指標
+    const valuation: RiskIndicator[] = [];
 
-  // 市場構造指標
-  const market: RiskIndicator[] = [
-    {
-      id: 'vix',
-      category: 'market',
-      name: 'VIX (恐怖指数)',
-      description: 'S&P500のボラティリティ指数',
-      currentValue: 13.5,
-      normalizedScore: 25,
-      threshold: 20,
-      isWarning: false,
-      historicalPercentile: 20,
-      trend: 'stable',
-      lastUpdated: now,
-    },
-    {
-      id: 'advance-decline',
-      category: 'market',
-      name: '騰落銘柄比率',
-      description: '上昇銘柄数 ÷ 下落銘柄数',
-      currentValue: 0.85,
-      normalizedScore: 48,
-      threshold: 1.0,
-      isWarning: false,
-      historicalPercentile: 45,
-      trend: 'falling',
-      lastUpdated: now,
-    },
-    {
-      id: 'index-concentration',
-      category: 'market',
-      name: '指数集中度',
-      description: 'トップ10銘柄の時価総額シェア',
-      currentValue: 32.5,
-      normalizedScore: 88,
-      threshold: 25,
-      isWarning: true,
-      historicalPercentile: 95,
-      trend: 'rising',
-      lastUpdated: now,
-    },
-    {
-      id: 'leveraged-etf',
-      category: 'market',
-      name: 'レバレッジETF残高',
-      description: 'レバレッジETFの運用資産残高（10億ドル）',
-      currentValue: 125,
-      normalizedScore: 72,
-      threshold: 100,
-      isWarning: true,
-      historicalPercentile: 82,
-      trend: 'rising',
-      lastUpdated: now,
-    },
-  ];
+    if (cape !== null) {
+      const score = normalizeValue(cape, HISTORICAL_RANGES.cape);
+      valuation.push({
+        id: 'cape',
+        category: 'valuation',
+        name: 'CAPE (Shiller PER)',
+        description: 'S&P500の景気調整後PER。過去10年の平均利益に基づく',
+        currentValue: cape,
+        normalizedScore: Math.round(score),
+        threshold: HISTORICAL_RANGES.cape.threshold,
+        isWarning: cape > HISTORICAL_RANGES.cape.threshold,
+        historicalPercentile: calculatePercentile(cape, HISTORICAL_RANGES.cape),
+        trend: 'stable',
+        lastUpdated: now,
+      });
+    }
 
-  // センチメント指標
-  const sentiment: RiskIndicator[] = [
-    {
-      id: 'aaii-bullish',
-      category: 'sentiment',
-      name: 'AAII強気比率',
-      description: '個人投資家の強気比率',
-      currentValue: 52.5,
-      normalizedScore: 65,
-      threshold: 50,
-      isWarning: true,
-      historicalPercentile: 75,
-      trend: 'rising',
-      lastUpdated: now,
-    },
-    {
-      id: 'put-call-ratio',
-      category: 'sentiment',
-      name: 'Put/Call Ratio',
-      description: 'プットオプション取引量 ÷ コールオプション取引量',
-      currentValue: 0.68,
-      normalizedScore: 58,
-      threshold: 0.7,
-      isWarning: false,
-      historicalPercentile: 55,
-      trend: 'stable',
-      lastUpdated: now,
-    },
-    {
-      id: 'margin-debt',
-      category: 'sentiment',
-      name: '信用取引残高',
-      description: '証券口座の信用取引残高（10億ドル）',
-      currentValue: 685,
-      normalizedScore: 70,
-      threshold: 600,
-      isWarning: true,
-      historicalPercentile: 78,
-      trend: 'rising',
-      lastUpdated: now,
-    },
-  ];
+    if (psr !== null) {
+      const score = normalizeValue(psr, HISTORICAL_RANGES.psr);
+      valuation.push({
+        id: 'psr',
+        category: 'valuation',
+        name: 'PSR (株価売上倍率)',
+        description: 'S&P500の時価総額を売上高で割った値',
+        currentValue: psr,
+        normalizedScore: Math.round(score),
+        threshold: HISTORICAL_RANGES.psr.threshold,
+        isWarning: psr > HISTORICAL_RANGES.psr.threshold,
+        historicalPercentile: calculatePercentile(psr, HISTORICAL_RANGES.psr),
+        trend: 'stable',
+        lastUpdated: now,
+      });
+    }
 
-  return { valuation, financial, macro, market, sentiment };
+    if (buffettIndicator !== null) {
+      const score = normalizeValue(buffettIndicator, HISTORICAL_RANGES.buffettIndicator);
+      valuation.push({
+        id: 'buffett-indicator',
+        category: 'valuation',
+        name: 'バフェット指数',
+        description: '米国株式時価総額をGDPで割った値',
+        currentValue: buffettIndicator,
+        normalizedScore: Math.round(score),
+        threshold: HISTORICAL_RANGES.buffettIndicator.threshold,
+        isWarning: buffettIndicator > HISTORICAL_RANGES.buffettIndicator.threshold,
+        historicalPercentile: calculatePercentile(buffettIndicator, HISTORICAL_RANGES.buffettIndicator),
+        trend: 'stable',
+        lastUpdated: now,
+      });
+    }
+
+    const earningsYieldSpread = await fetchEarningsYieldSpread(macroData.yield10Y);
+    if (earningsYieldSpread !== null) {
+      const score = normalizeValue(earningsYieldSpread, HISTORICAL_RANGES.earningsYieldSpread, false);
+      valuation.push({
+        id: 'earnings-yield-spread',
+        category: 'valuation',
+        name: '株益利回りスプレッド',
+        description: 'S&P500益利回り - 10年国債利回り',
+        currentValue: earningsYieldSpread,
+        normalizedScore: Math.round(score),
+        threshold: HISTORICAL_RANGES.earningsYieldSpread.threshold,
+        isWarning: earningsYieldSpread < HISTORICAL_RANGES.earningsYieldSpread.threshold,
+        historicalPercentile: 100 - calculatePercentile(earningsYieldSpread, HISTORICAL_RANGES.earningsYieldSpread),
+        trend: 'stable',
+        lastUpdated: now,
+      });
+    }
+
+    // 金融・信用指標
+    const financial: RiskIndicator[] = [];
+
+    if (macroData.fedFundsRate !== null) {
+      const score = normalizeValue(macroData.fedFundsRate, HISTORICAL_RANGES.fedFundsRate);
+      financial.push({
+        id: 'fed-funds-rate',
+        category: 'financial',
+        name: 'FF金利',
+        description: '米国の政策金利',
+        currentValue: macroData.fedFundsRate,
+        normalizedScore: Math.round(score),
+        threshold: HISTORICAL_RANGES.fedFundsRate.threshold,
+        isWarning: macroData.fedFundsRate > HISTORICAL_RANGES.fedFundsRate.threshold,
+        historicalPercentile: calculatePercentile(macroData.fedFundsRate, HISTORICAL_RANGES.fedFundsRate),
+        trend: 'stable',
+        lastUpdated: now,
+      });
+    }
+
+    if (creditSpread !== null) {
+      const score = normalizeValue(creditSpread, HISTORICAL_RANGES.creditSpread);
+      financial.push({
+        id: 'credit-spread',
+        category: 'financial',
+        name: 'クレジットスプレッド',
+        description: '投資適格社債と国債の利回り差',
+        currentValue: creditSpread,
+        normalizedScore: Math.round(score),
+        threshold: HISTORICAL_RANGES.creditSpread.threshold,
+        isWarning: creditSpread > HISTORICAL_RANGES.creditSpread.threshold,
+        historicalPercentile: calculatePercentile(creditSpread, HISTORICAL_RANGES.creditSpread),
+        trend: 'stable',
+        lastUpdated: now,
+      });
+    }
+
+    if (hyYield !== null) {
+      const score = normalizeValue(hyYield, HISTORICAL_RANGES.hyYield);
+      financial.push({
+        id: 'hy-yield',
+        category: 'financial',
+        name: 'HY債利回り',
+        description: 'ハイイールド債の利回り',
+        currentValue: hyYield,
+        normalizedScore: Math.round(score),
+        threshold: HISTORICAL_RANGES.hyYield.threshold,
+        isWarning: hyYield > HISTORICAL_RANGES.hyYield.threshold,
+        historicalPercentile: calculatePercentile(hyYield, HISTORICAL_RANGES.hyYield),
+        trend: 'stable',
+        lastUpdated: now,
+      });
+    }
+
+    if (macroData.m2Growth !== null) {
+      const score = normalizeValue(macroData.m2Growth, HISTORICAL_RANGES.m2Growth, false);
+      financial.push({
+        id: 'm2-growth',
+        category: 'financial',
+        name: 'M2増加率',
+        description: 'マネーサプライの前年同月比増加率',
+        currentValue: macroData.m2Growth,
+        normalizedScore: Math.round(score),
+        threshold: HISTORICAL_RANGES.m2Growth.threshold,
+        isWarning: macroData.m2Growth < HISTORICAL_RANGES.m2Growth.threshold,
+        historicalPercentile: 100 - calculatePercentile(macroData.m2Growth, HISTORICAL_RANGES.m2Growth),
+        trend: macroData.m2Growth < 0 ? 'falling' : 'rising',
+        lastUpdated: now,
+      });
+    }
+
+    // マクロ経済指標
+    const macro: RiskIndicator[] = [];
+
+    if (macroData.cpi !== null) {
+      const score = normalizeValue(macroData.cpi, HISTORICAL_RANGES.cpi);
+      macro.push({
+        id: 'cpi',
+        category: 'macro',
+        name: 'CPI (消費者物価指数)',
+        description: '前年同月比のインフレ率',
+        currentValue: macroData.cpi,
+        normalizedScore: Math.round(score),
+        threshold: HISTORICAL_RANGES.cpi.threshold,
+        isWarning: macroData.cpi > HISTORICAL_RANGES.cpi.threshold,
+        historicalPercentile: calculatePercentile(macroData.cpi, HISTORICAL_RANGES.cpi),
+        trend: macroData.cpi > 3 ? 'rising' : 'falling',
+        lastUpdated: now,
+      });
+    }
+
+    if (macroData.unemploymentRate !== null) {
+      const score = normalizeValue(macroData.unemploymentRate, HISTORICAL_RANGES.unemployment);
+      macro.push({
+        id: 'unemployment',
+        category: 'macro',
+        name: '失業率',
+        description: '米国の失業率',
+        currentValue: macroData.unemploymentRate,
+        normalizedScore: Math.round(score),
+        threshold: HISTORICAL_RANGES.unemployment.threshold,
+        isWarning: macroData.unemploymentRate > HISTORICAL_RANGES.unemployment.threshold,
+        historicalPercentile: calculatePercentile(macroData.unemploymentRate, HISTORICAL_RANGES.unemployment),
+        trend: macroData.unemploymentRate > 4 ? 'rising' : 'falling',
+        lastUpdated: now,
+      });
+    }
+
+    if (macroData.yieldCurve !== null) {
+      const score = normalizeValue(macroData.yieldCurve, HISTORICAL_RANGES.yieldCurve, false);
+      macro.push({
+        id: 'yield-curve',
+        category: 'macro',
+        name: 'イールドカーブ',
+        description: '10年債利回り - 2年債利回り',
+        currentValue: macroData.yieldCurve,
+        normalizedScore: Math.round(score),
+        threshold: HISTORICAL_RANGES.yieldCurve.threshold,
+        isWarning: macroData.yieldCurve < HISTORICAL_RANGES.yieldCurve.threshold,
+        historicalPercentile: 100 - calculatePercentile(macroData.yieldCurve, HISTORICAL_RANGES.yieldCurve),
+        trend: macroData.yieldCurve < 0 ? 'falling' : 'rising',
+        lastUpdated: now,
+      });
+    }
+
+    // 市場構造指標
+    const market: RiskIndicator[] = [];
+
+    const vixValue = vix || macroData.vix;
+    if (vixValue !== null) {
+      const score = normalizeValue(vixValue, HISTORICAL_RANGES.vix);
+      market.push({
+        id: 'vix',
+        category: 'market',
+        name: 'VIX (恐怖指数)',
+        description: 'S&P500のボラティリティ指数',
+        currentValue: vixValue,
+        normalizedScore: Math.round(score),
+        threshold: HISTORICAL_RANGES.vix.threshold,
+        isWarning: vixValue > HISTORICAL_RANGES.vix.threshold,
+        historicalPercentile: calculatePercentile(vixValue, HISTORICAL_RANGES.vix),
+        trend: vixValue > 20 ? 'rising' : 'stable',
+        lastUpdated: now,
+      });
+    }
+
+    if (indexConcentration !== null) {
+      const score = normalizeValue(indexConcentration, HISTORICAL_RANGES.indexConcentration);
+      market.push({
+        id: 'index-concentration',
+        category: 'market',
+        name: '指数集中度',
+        description: 'トップ10銘柄の時価総額シェア',
+        currentValue: indexConcentration,
+        normalizedScore: Math.round(score),
+        threshold: HISTORICAL_RANGES.indexConcentration.threshold,
+        isWarning: indexConcentration > HISTORICAL_RANGES.indexConcentration.threshold,
+        historicalPercentile: calculatePercentile(indexConcentration, HISTORICAL_RANGES.indexConcentration),
+        trend: 'rising',
+        lastUpdated: now,
+      });
+    }
+
+    if (leveragedETF !== null) {
+      const score = normalizeValue(leveragedETF, HISTORICAL_RANGES.leveragedETF);
+      market.push({
+        id: 'leveraged-etf',
+        category: 'market',
+        name: 'レバレッジETF残高',
+        description: 'レバレッジETFの運用資産残高（10億ドル）',
+        currentValue: leveragedETF,
+        normalizedScore: Math.round(score),
+        threshold: HISTORICAL_RANGES.leveragedETF.threshold,
+        isWarning: leveragedETF > HISTORICAL_RANGES.leveragedETF.threshold,
+        historicalPercentile: calculatePercentile(leveragedETF, HISTORICAL_RANGES.leveragedETF),
+        trend: 'rising',
+        lastUpdated: now,
+      });
+    }
+
+    // センチメント指標
+    const sentiment: RiskIndicator[] = [];
+
+    if (marginDebt !== null) {
+      const score = normalizeValue(marginDebt, HISTORICAL_RANGES.marginDebt);
+      sentiment.push({
+        id: 'margin-debt',
+        category: 'sentiment',
+        name: '信用取引残高',
+        description: '証券口座の信用取引残高（10億ドル）',
+        currentValue: marginDebt,
+        normalizedScore: Math.round(score),
+        threshold: HISTORICAL_RANGES.marginDebt.threshold,
+        isWarning: marginDebt > HISTORICAL_RANGES.marginDebt.threshold,
+        historicalPercentile: calculatePercentile(marginDebt, HISTORICAL_RANGES.marginDebt),
+        trend: 'stable',
+        lastUpdated: now,
+      });
+    }
+
+    return { valuation, financial, macro, market, sentiment };
+  } catch (error) {
+    console.error('Error generating real indicators:', error);
+    return null;
+  }
 }
+
+// サンプルデータ（フォールバック用）は省略し、元のコードを簡略化
 
 // カテゴリスコア計算
 function calculateCategoryScores(indicators: {
@@ -314,7 +419,7 @@ function calculateCategoryScores(indicators: {
 
   return categories.map((category) => {
     const categoryIndicators = indicators[category];
-    const score = calculateCategoryScore(categoryIndicators);
+    const score = categoryIndicators.length > 0 ? calculateCategoryScore(categoryIndicators) : 0;
     const warningCount = categoryIndicators.filter((ind) => ind.isWarning).length;
 
     return {
@@ -359,7 +464,6 @@ function generateAlerts(
   const alerts: Alert[] = [];
   const now = new Date().toISOString();
 
-  // 総合スコアに基づくアラート
   if (overallScore >= 80) {
     alerts.push({
       id: `alert-overall-${Date.now()}`,
@@ -380,9 +484,8 @@ function generateAlerts(
     });
   }
 
-  // カテゴリ別アラート
   categoryScores.forEach((cat) => {
-    if (cat.score >= 75 && cat.warningCount >= 3) {
+    if (cat.score >= 75 && cat.warningCount >= 2) {
       alerts.push({
         id: `alert-${cat.category}-${Date.now()}`,
         timestamp: now,
@@ -394,52 +497,35 @@ function generateAlerts(
     }
   });
 
-  // 特定の重要指標アラート
-  if (topWarnings.some((w) => w.id === 'buffett-indicator' && w.normalizedScore >= 80)) {
-    alerts.push({
-      id: `alert-buffett-${Date.now()}`,
-      timestamp: now,
-      severity: 'warning',
-      category: 'valuation',
-      message: 'バフェット指数が危険水準を大きく超過しています。市場全体が過熱している可能性があります。',
-      indicators: ['buffett-indicator'],
-    });
-  }
-
-  if (topWarnings.some((w) => w.id === 'yield-curve' && w.currentValue < 0)) {
-    alerts.push({
-      id: `alert-yield-curve-${Date.now()}`,
-      timestamp: now,
-      severity: 'warning',
-      category: 'macro',
-      message: 'イールドカーブが逆転しています。過去、景気後退の先行指標となっています。',
-      indicators: ['yield-curve'],
-    });
-  }
-
   return alerts;
 }
 
 export async function GET() {
   try {
-    const indicators = generateSampleIndicators();
+    console.log('[Risk Monitor] Fetching real-time risk indicators...');
+
+    // 実際のデータを取得
+    let indicators = await generateRealIndicators();
+
+    // データ取得に失敗した場合は部分的なデータで継続
+    if (!indicators || Object.values(indicators).every(arr => arr.length === 0)) {
+      console.warn('[Risk Monitor] Failed to fetch real data, API key may be missing');
+      return NextResponse.json({
+        success: false,
+        error: 'データの取得に失敗しました。FRED_API_KEYを設定してください。',
+      }, { status: 503 });
+    }
+
     const categoryScores = calculateCategoryScores(indicators);
     const overallScore = calculateOverallScore(categoryScores);
     const overallLevel = determineRiskLevel(overallScore);
     const topWarnings = getTopWarnings(indicators);
 
-    // 過去の暴落局面との類似度計算（簡易版）
     const currentScores = categoryScores.map((c) => c.score);
-
-    // 2000年ITバブル崩壊時のパターン（高バリュエーション、楽観センチメント）
-    const pattern2000 = [85, 45, 50, 60, 80]; // [valuation, financial, macro, market, sentiment]
+    const pattern2000 = [85, 45, 50, 60, 80];
     const similarTo2000 = calculateHistoricalSimilarity(currentScores, pattern2000);
-
-    // 2008年リーマンショック時のパターン（高信用リスク、金融逼迫）
     const pattern2008 = [70, 90, 75, 65, 55];
     const similarTo2008 = calculateHistoricalSimilarity(currentScores, pattern2008);
-
-    // 2020年コロナショック時のパターン（市場構造の急変）
     const pattern2020 = [55, 60, 70, 85, 45];
     const similarTo2020 = calculateHistoricalSimilarity(currentScores, pattern2020);
 
@@ -458,6 +544,8 @@ export async function GET() {
       },
       alerts,
     };
+
+    console.log(`[Risk Monitor] Assessment complete. Overall score: ${overallScore}`);
 
     return NextResponse.json({
       success: true,
