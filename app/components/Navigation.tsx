@@ -31,6 +31,12 @@ export default async function Navigation() {
               >
                 マイウォッチリスト
               </Link>
+              <Link
+                href="/risk-monitor"
+                className="px-3 py-2 rounded-md text-sm font-medium transition-colors text-red-400 hover:bg-gray-700 hover:text-red-300"
+              >
+                🚨 リスク監視
+              </Link>
             </div>
           </div>
 
