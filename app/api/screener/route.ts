@@ -6,6 +6,7 @@ import {
   calculateScore,
   matchesFilters,
 } from '@/app/utils/screener';
+import { fetchStockQuote } from '@/app/utils/stockQuote';
 
 // Helper function to enrich stock data with new fields
 function enrichStockData(stock: Partial<StockFundamentals>): StockFundamentals {
@@ -525,7 +526,7 @@ const SAMPLE_STOCKS: StockFundamentals[] = SAMPLE_STOCKS_RAW.map(enrichStockData
 
 /**
  * リアルタイム株価を取得してサンプルデータを更新
- * /api/stock/quote エンドポイントを使用（個別銘柄ページと同じロジック）
+ * fetchStockQuote関数を使用（Alpha Vantage → Yahoo Finance フォールバック）
  */
 async function updateStockPricesFromAPI(
   stocks: StockFundamentals[]
@@ -533,32 +534,15 @@ async function updateStockPricesFromAPI(
   const updatedStocks = await Promise.all(
     stocks.map(async (stock) => {
       try {
-        // 内部APIエンドポイントを呼び出し
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/stock/quote?symbol=${stock.symbol}`,
-          { cache: 'no-store' }
-        );
-
-        if (!response.ok) {
-          console.warn(`Failed to fetch price for ${stock.symbol}: ${response.status}`);
-          return stock; // エラー時はサンプルデータを使用
-        }
-
-        const data = await response.json();
-
-        if (data.error || !data['Global Quote']) {
-          console.warn(`No data for ${stock.symbol}`);
-          return stock;
-        }
-
-        const quote = data['Global Quote'];
+        // 株価データを取得
+        const quote = await fetchStockQuote(stock.symbol);
 
         // リアルタイム価格でサンプルデータを更新
         return {
           ...stock,
-          price: parseFloat(quote['05. price']),
-          change: parseFloat(quote['09. change']),
-          changePercent: parseFloat(quote['10. change percent'].replace('%', '')),
+          price: quote.price,
+          change: quote.change,
+          changePercent: quote.changePercent,
         };
       } catch (error) {
         console.warn(
