@@ -21,11 +21,15 @@ import {
   fetchLeveragedETFAssets,
   fetchMarginDebt,
 } from '@/app/utils/marketData';
+import { shouldNotify, sendNotifications } from '@/app/utils/notifications';
 
 /**
  * S&P500大暴落リスク監視API
  * 実際のデータソースから現在のリスク評価を返す
  */
+
+// 最後の通知時刻を記録（メモリ内、実際にはDBやKVストアを使用すべき）
+let lastNotificationTime: string | undefined = undefined;
 
 // 正規化スコア計算用の歴史的範囲
 const HISTORICAL_RANGES = {
@@ -547,10 +551,32 @@ export async function GET() {
 
     console.log(`[Risk Monitor] Assessment complete. Overall score: ${overallScore}`);
 
+    // 通知が必要かチェックして送信
+    let notificationsSent = false;
+    if (shouldNotify(assessment, lastNotificationTime)) {
+      console.log('[Risk Monitor] Sending notifications...');
+      try {
+        const notificationRecords = await sendNotifications(assessment);
+        if (notificationRecords.some((record) => record.success)) {
+          lastNotificationTime = new Date().toISOString();
+          notificationsSent = true;
+          console.log(
+            `[Risk Monitor] Notifications sent successfully: ${notificationRecords.filter((r) => r.success).length}/${notificationRecords.length}`
+          );
+        } else {
+          console.warn('[Risk Monitor] All notifications failed');
+        }
+      } catch (notificationError) {
+        console.error('[Risk Monitor] Notification error:', notificationError);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       data: assessment,
       indicators,
+      notificationsSent,
+      lastNotificationTime,
     });
   } catch (error) {
     console.error('Risk monitor API error:', error);
