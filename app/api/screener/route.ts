@@ -523,6 +523,56 @@ const SAMPLE_STOCKS_RAW: Partial<StockFundamentals>[] = [
 // Apply enrichment to add new fields
 const SAMPLE_STOCKS: StockFundamentals[] = SAMPLE_STOCKS_RAW.map(enrichStockData);
 
+/**
+ * リアルタイム株価を取得してサンプルデータを更新
+ * /api/stock/quote エンドポイントを使用（個別銘柄ページと同じロジック）
+ */
+async function updateStockPricesFromAPI(
+  stocks: StockFundamentals[]
+): Promise<StockFundamentals[]> {
+  const updatedStocks = await Promise.all(
+    stocks.map(async (stock) => {
+      try {
+        // 内部APIエンドポイントを呼び出し
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/stock/quote?symbol=${stock.symbol}`,
+          { cache: 'no-store' }
+        );
+
+        if (!response.ok) {
+          console.warn(`Failed to fetch price for ${stock.symbol}: ${response.status}`);
+          return stock; // エラー時はサンプルデータを使用
+        }
+
+        const data = await response.json();
+
+        if (data.error || !data['Global Quote']) {
+          console.warn(`No data for ${stock.symbol}`);
+          return stock;
+        }
+
+        const quote = data['Global Quote'];
+
+        // リアルタイム価格でサンプルデータを更新
+        return {
+          ...stock,
+          price: parseFloat(quote['05. price']),
+          change: parseFloat(quote['09. change']),
+          changePercent: parseFloat(quote['10. change percent'].replace('%', '')),
+        };
+      } catch (error) {
+        console.warn(
+          `Error fetching price for ${stock.symbol}:`,
+          error instanceof Error ? error.message : error
+        );
+        return stock; // エラー時はサンプルデータを使用
+      }
+    })
+  );
+
+  return updatedStocks;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -613,13 +663,18 @@ export async function GET(request: NextRequest) {
       filters.themes = themes.split(',');
     }
 
+    // リアルタイム株価を取得
+    console.log('[Screener] Fetching real-time prices...');
+    const stocksWithRealPrices = await updateStockPricesFromAPI(SAMPLE_STOCKS);
+    console.log('[Screener] Real-time prices fetched');
+
     // Filter and score stocks
-    const results: ScreenerResult[] = SAMPLE_STOCKS.filter((stock) =>
-      matchesFilters(stock, filters)
-    ).map((stock) => ({
-      ...stock,
-      score: calculateScore(stock),
-    }));
+    const results: ScreenerResult[] = stocksWithRealPrices
+      .filter((stock) => matchesFilters(stock, filters))
+      .map((stock) => ({
+        ...stock,
+        score: calculateScore(stock),
+      }));
 
     // Sort by total score (descending)
     results.sort((a, b) => b.score.total - a.score.total);

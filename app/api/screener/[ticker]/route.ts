@@ -520,6 +520,56 @@ const SAMPLE_STOCKS_RAW: Partial<StockFundamentals>[] = [
 // Apply enrichment to add new fields
 const SAMPLE_STOCKS: StockFundamentals[] = SAMPLE_STOCKS_RAW.map(enrichStockData);
 
+/**
+ * リアルタイム株価を取得してサンプルデータを更新
+ * /api/stock/quote エンドポイントを使用（個別銘柄ページと同じロジック）
+ */
+async function updateStockPricesFromAPI(
+  stocks: StockFundamentals[]
+): Promise<StockFundamentals[]> {
+  const updatedStocks = await Promise.all(
+    stocks.map(async (stock) => {
+      try {
+        // 内部APIエンドポイントを呼び出し
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/stock/quote?symbol=${stock.symbol}`,
+          { cache: 'no-store' }
+        );
+
+        if (!response.ok) {
+          console.warn(`Failed to fetch price for ${stock.symbol}: ${response.status}`);
+          return stock; // エラー時はサンプルデータを使用
+        }
+
+        const data = await response.json();
+
+        if (data.error || !data['Global Quote']) {
+          console.warn(`No data for ${stock.symbol}`);
+          return stock;
+        }
+
+        const quote = data['Global Quote'];
+
+        // リアルタイム価格でサンプルデータを更新
+        return {
+          ...stock,
+          price: parseFloat(quote['05. price']),
+          change: parseFloat(quote['09. change']),
+          changePercent: parseFloat(quote['10. change percent'].replace('%', '')),
+        };
+      } catch (error) {
+        console.warn(
+          `Error fetching price for ${stock.symbol}:`,
+          error instanceof Error ? error.message : error
+        );
+        return stock; // エラー時はサンプルデータを使用
+      }
+    })
+  );
+
+  return updatedStocks;
+}
+
 // Get competitors in same sector
 function getCompetitors(stock: StockFundamentals, allStocks: StockFundamentals[]): ScreenerResult[] {
   return allStocks
@@ -536,7 +586,12 @@ export async function GET(
     const { ticker } = await params;
     const symbol = ticker.toUpperCase();
 
-    const stock = SAMPLE_STOCKS.find((s) => s.symbol === symbol);
+    // リアルタイム株価を取得
+    console.log(`[Ticker] Fetching real-time prices for ${symbol}...`);
+    const stocksWithRealPrices = await updateStockPricesFromAPI(SAMPLE_STOCKS);
+    console.log(`[Ticker] Real-time prices fetched`);
+
+    const stock = stocksWithRealPrices.find((s) => s.symbol === symbol);
 
     if (!stock) {
       return NextResponse.json(
@@ -550,7 +605,7 @@ export async function GET(
       score: calculateScore(stock),
     };
 
-    const competitors = getCompetitors(stock, SAMPLE_STOCKS);
+    const competitors = getCompetitors(stock, stocksWithRealPrices);
 
     return NextResponse.json({
       success: true,
