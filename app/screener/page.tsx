@@ -80,6 +80,7 @@ export default function ScreenerPage() {
   const [filters, setFilters] = useState<ScreenerFilters>({});
   const [results, setResults] = useState<ScreenerResult[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<{ message: string; details?: string } | null>(null);
   const [activePreset, setActivePreset] = useState<string | null>(null);
   const [expandedSection, setExpandedSection] = useState<string | null>('fundamental');
 
@@ -106,6 +107,7 @@ export default function ScreenerPage() {
 
   const fetchResults = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const params = new URLSearchParams();
       Object.entries(filters).forEach(([key, value]) => {
@@ -123,9 +125,23 @@ export default function ScreenerPage() {
 
       if (data.success) {
         setResults(data.results);
+        setError(null);
+      } else {
+        // API returned an error
+        setResults([]);
+        setError({
+          message: data.error || 'データの取得に失敗しました',
+          details: data.details || data.hint,
+        });
+        console.error('[Screener UI] API error:', data);
       }
     } catch (error) {
-      console.error('Error fetching screener results:', error);
+      console.error('[Screener UI] Fetch error:', error);
+      setResults([]);
+      setError({
+        message: 'サーバーとの通信に失敗しました',
+        details: error instanceof Error ? error.message : '予期しないエラーが発生しました',
+      });
     } finally {
       setLoading(false);
     }
@@ -561,11 +577,32 @@ export default function ScreenerPage() {
                 )}
               </div>
 
-              {results.length === 0 && !loading ? (
+              {/* Error Display */}
+              {error && !loading && (
+                <div className="mb-4 bg-red-900 bg-opacity-30 border border-red-700 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="text-red-400 text-xl">⚠️</div>
+                    <div className="flex-1">
+                      <h3 className="text-red-300 font-semibold mb-1">{error.message}</h3>
+                      {error.details && (
+                        <p className="text-red-200 text-sm">{error.details}</p>
+                      )}
+                      <button
+                        onClick={fetchResults}
+                        className="mt-3 px-4 py-2 bg-red-700 hover:bg-red-600 rounded text-sm text-white"
+                      >
+                        再試行
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {results.length === 0 && !loading && !error ? (
                 <div className="text-center py-12 text-gray-400">
                   条件に一致する銘柄がありません
                 </div>
-              ) : (
+              ) : !error ? (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>

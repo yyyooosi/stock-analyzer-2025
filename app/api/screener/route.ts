@@ -159,15 +159,20 @@ export async function GET(request: NextRequest) {
 
     // Fetch stocks from FMP API
     console.log('[Screener] Starting stock data fetch...');
+    console.log('[Screener] Environment: ', process.env.NODE_ENV);
+    console.log('[Screener] Vercel URL: ', process.env.VERCEL_URL || 'Not on Vercel');
+
     const stocks = await fetchStocksFromFMP(filters);
 
     if (stocks.length === 0) {
+      console.error('[Screener] No stocks returned from FMP API');
       return NextResponse.json({
         success: false,
-        error: 'FMP APIから株式データを取得できませんでした。FMP_API_KEYが正しく設定されているか確認してください。',
+        error: 'FMP APIから株式データを取得できませんでした。',
+        details: 'APIキーが正しく設定されているか、またはAPI制限に達していないか確認してください。',
         count: 0,
         results: [],
-      });
+      }, { status: 500 });
     }
 
     console.log(`[Screener] Processing ${stocks.length} stocks with filters...`);
@@ -189,24 +194,62 @@ export async function GET(request: NextRequest) {
       results,
     });
   } catch (error) {
-    console.error('Screener API error:', error);
+    console.error('[Screener] API error:', error);
+
+    // Detailed error logging for production debugging
+    if (error instanceof Error) {
+      console.error('[Screener] Error name:', error.name);
+      console.error('[Screener] Error message:', error.message);
+      console.error('[Screener] Error stack:', error.stack);
+    }
 
     // Check if it's an API key error
     if (error instanceof Error && error.message.includes('FMP_API_KEY')) {
       return NextResponse.json(
         {
           success: false,
-          error: 'FMP APIキーが設定されていません。環境変数FMP_API_KEYを設定してください。',
+          error: 'FMP APIキーが設定されていません',
+          details: '環境変数FMP_API_KEYを設定してください。',
           hint: 'https://financialmodelingprep.com/developer/docs でAPIキーを取得できます（無料プラン: 250リクエスト/日）',
+          errorType: 'API_KEY_MISSING',
         },
         { status: 500 }
       );
     }
 
+    // Check for network errors
+    if (error instanceof Error && (error.message.includes('fetch') || error.message.includes('network'))) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'FMP APIへの接続に失敗しました',
+          details: 'ネットワーク接続を確認してください。',
+          errorType: 'NETWORK_ERROR',
+        },
+        { status: 503 }
+      );
+    }
+
+    // Check for rate limit errors
+    if (error instanceof Error && error.message.includes('429')) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'API呼び出し制限に達しました',
+          details: 'FMP APIの無料プランは250リクエスト/日です。時間をおいて再度お試しください。',
+          errorType: 'RATE_LIMIT',
+        },
+        { status: 429 }
+      );
+    }
+
+    // Generic error
     return NextResponse.json(
       {
         success: false,
-        error: 'スクリーニング処理中にエラーが発生しました。FMP APIへの接続を確認してください。',
+        error: 'データの取得に失敗しました',
+        details: error instanceof Error ? error.message : 'スクリーニング処理中に予期しないエラーが発生しました。',
+        errorType: 'UNKNOWN_ERROR',
       },
       { status: 500 }
     );

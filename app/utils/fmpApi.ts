@@ -242,21 +242,33 @@ export async function fetchFMPSymbolsList(): Promise<string[]> {
   const apiKey = process.env.FMP_API_KEY;
 
   if (!apiKey) {
-    console.warn('[FMP] API key not configured');
-    return [];
+    console.error('[FMP] API key not configured - cannot fetch symbols');
+    throw new Error('FMP_API_KEY is not configured');
   }
 
   const url = `${FMP_BASE_URL}/financial-statement-symbol-lists?apikey=${apiKey}`;
 
-  console.log(`[FMP] Fetching financial statement symbol lists: ${url.replace(apiKey, 'API_KEY_HIDDEN')}`);
+  console.log(`[FMP] Fetching financial statement symbol lists`);
+  console.log(`[FMP] API Key (first 4 chars): ${apiKey.substring(0, 4)}...`);
 
   try {
+    console.log(`[FMP] Calling FMP API...`);
     const response = await fetch(url);
+
+    console.log(`[FMP] Response status: ${response.status} ${response.statusText}`);
 
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`[FMP] API Error ${response.status}:`, errorText);
-      throw new Error(`FMP API returned status ${response.status}: ${errorText}`);
+
+      // Specific error messages
+      if (response.status === 401) {
+        throw new Error(`FMP API authentication failed (401). Please check your API key.`);
+      } else if (response.status === 429) {
+        throw new Error(`FMP API rate limit exceeded (429). Free tier allows 250 requests/day.`);
+      } else {
+        throw new Error(`FMP API returned status ${response.status}: ${errorText}`);
+      }
     }
 
     const data = await response.json();
@@ -291,8 +303,8 @@ export async function fetchFMPStockQuotes(symbols: string[] | string): Promise<F
   const apiKey = process.env.FMP_API_KEY;
 
   if (!apiKey) {
-    console.warn('[FMP] API key not configured');
-    return [];
+    console.error('[FMP] API key not configured - cannot fetch quotes');
+    throw new Error('FMP_API_KEY is not configured');
   }
 
   const symbolsStr = Array.isArray(symbols) ? symbols.join(',') : symbols;
@@ -303,10 +315,20 @@ export async function fetchFMPStockQuotes(symbols: string[] | string): Promise<F
   try {
     const response = await fetch(url);
 
+    console.log(`[FMP] Quote response status: ${response.status} ${response.statusText}`);
+
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`[FMP] API Error ${response.status}:`, errorText);
-      throw new Error(`FMP API returned status ${response.status}: ${errorText}`);
+
+      // Specific error messages
+      if (response.status === 401) {
+        throw new Error(`FMP API authentication failed (401). Please check your API key.`);
+      } else if (response.status === 429) {
+        throw new Error(`FMP API rate limit exceeded (429). Free tier allows 250 requests/day.`);
+      } else {
+        throw new Error(`FMP API returned status ${response.status}: ${errorText}`);
+      }
     }
 
     const data = await response.json();
