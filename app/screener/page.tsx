@@ -598,11 +598,11 @@ export default function ScreenerPage() {
                 </div>
               )}
 
-              {results.length === 0 && !loading && !error ? (
+              {error ? null : results.length === 0 && !loading ? (
                 <div className="text-center py-12 text-gray-400">
                   条件に一致する銘柄がありません
                 </div>
-              ) : !error ? (
+              ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
