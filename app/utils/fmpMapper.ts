@@ -63,7 +63,7 @@ export function mapFMPDataToStockFundamentals(fmpData: FMPCombinedStockData): St
     freeCashFlow3YTrend: null, // Would need historical data
 
     // Dividend metrics
-    dividendYield: keyMetrics?.dividendYieldTTM ?? ratios?.dividendYield ?? screener.lastAnnualDividend / screener.price ?? null,
+    dividendYield: keyMetrics?.dividendYieldTTM ?? ratios?.dividendYield ?? (screener.lastAnnualDividend && screener.price > 0 ? screener.lastAnnualDividend / screener.price : null),
     consecutiveDividendYears: null, // FMP doesn't provide this in free tier
     payoutRatio: keyMetrics?.payoutRatioTTM ?? ratios?.payoutRatio ?? null,
 
