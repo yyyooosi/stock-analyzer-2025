@@ -2,11 +2,14 @@
  * Financial Modeling Prep (FMP) API Utility
  *
  * This module provides functions to fetch stock data from the FMP API:
- * - Stock screener with filters (market cap, price, sector, etc.)
+ * - Stock list and quotes (using available-traded/list endpoint)
  * - Company fundamentals (P/E, P/B, ROE, etc.)
  * - Financial ratios and key metrics
  *
  * API Documentation: https://site.financialmodelingprep.com/developer/docs
+ *
+ * NOTE: Stock Screener API (/api/v3/stock-screener) is deprecated as of August 31, 2025.
+ * We now use /api/v3/available-traded/list as the primary data source.
  */
 
 const FMP_BASE_URL = 'https://financialmodelingprep.com/api/v3';
@@ -63,6 +66,19 @@ export interface FMPStockScreenerResult {
   country: string;
   isEtf: boolean;
   isActivelyTrading: boolean;
+}
+
+/**
+ * Response from /api/v3/available-traded/list endpoint
+ * This is the NEW recommended endpoint (Stock Screener API is deprecated)
+ */
+export interface FMPTradableStock {
+  symbol: string;
+  name: string;
+  price: number;
+  exchange: string;
+  exchangeShortName?: string;
+  type?: string; // "stock", "etf", "trust", etc.
 }
 
 export interface FMPKeyMetrics {
@@ -189,9 +205,58 @@ export interface FMPFinancialRatios {
 }
 
 /**
- * Fetch stocks using FMP stock screener
+ * Fetch list of tradable stocks from FMP
+ * This replaces the deprecated stock-screener endpoint
+ * @returns Array of tradable stocks
+ */
+export async function fetchFMPTradableStocks(): Promise<FMPTradableStock[]> {
+  const apiKey = process.env.FMP_API_KEY;
+
+  if (!apiKey) {
+    console.warn('[FMP] API key not configured');
+    return [];
+  }
+
+  const url = `${FMP_BASE_URL}/available-traded/list?apikey=${apiKey}`;
+
+  console.log(`[FMP] Fetching tradable stocks list: ${url.replace(apiKey, 'API_KEY_HIDDEN')}`);
+
+  try {
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[FMP] API Error ${response.status}:`, errorText);
+      throw new Error(`FMP API returned status ${response.status}: ${errorText}`);
+    }
+
+    const data = await response.json();
+
+    if (Array.isArray(data)) {
+      console.log(`[FMP] Tradable stocks list returned ${data.length} results`);
+      return data;
+    }
+
+    // Check for error response
+    if (data.error || data['Error Message']) {
+      const errorMsg = data.error || data['Error Message'];
+      console.error('[FMP] API Error Response:', errorMsg);
+      throw new Error(`FMP API Error: ${errorMsg}`);
+    }
+
+    console.warn('[FMP] Unexpected response format:', data);
+    return [];
+  } catch (error) {
+    console.error('[FMP] Tradable stocks list error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Fetch stocks using FMP stock screener (DEPRECATED - kept for backwards compatibility)
  * @param params - Screening parameters
  * @returns Array of stocks matching the criteria
+ * @deprecated Stock Screener API is deprecated as of August 31, 2025. Use fetchFMPTradableStocks instead.
  */
 export async function fetchFMPStockScreener(
   params: FMPScreenerParams = {}
@@ -382,14 +447,81 @@ export interface FMPCombinedStockData {
  * @param fetchDetailedData - Whether to fetch key metrics and ratios (default: false to save API calls)
  * @returns Array of combined stock data
  */
+/**
+ * NEW: Convert tradable stocks to screener format
+ * Since stock-screener API is deprecated, we use available-traded/list
+ * and convert the simpler format to the expected screener format
+ */
+function convertTradableStockToScreenerFormat(stock: FMPTradableStock): FMPStockScreenerResult {
+  return {
+    symbol: stock.symbol,
+    companyName: stock.name,
+    price: stock.price,
+    exchange: stock.exchange,
+    exchangeShortName: stock.exchangeShortName || stock.exchange,
+    // Default values for fields not provided by tradable stocks API
+    marketCap: 0, // Will be filtered out if needed
+    sector: 'Unknown',
+    industry: 'Unknown',
+    beta: 0,
+    lastAnnualDividend: 0,
+    volume: 0,
+    country: 'US',
+    isEtf: stock.type === 'etf',
+    isActivelyTrading: true,
+  };
+}
+
 export async function fetchFMPComprehensiveStockData(
   screenerParams: FMPScreenerParams = {},
   fetchDetailedData: boolean = false
 ): Promise<FMPCombinedStockData[]> {
   console.log('[FMP] Fetching comprehensive stock data...');
 
-  // Step 1: Get stocks from screener
-  const screenerResults = await fetchFMPStockScreener(screenerParams);
+  // Step 1: Get stocks using NEW available-traded/list endpoint
+  // (stock-screener is deprecated as of August 31, 2025)
+  console.log('[FMP] Using available-traded/list endpoint (stock-screener deprecated)');
+  const tradableStocks = await fetchFMPTradableStocks();
+
+  if (tradableStocks.length === 0) {
+    console.log('[FMP] No tradable stocks found');
+    return [];
+  }
+
+  console.log(`[FMP] Got ${tradableStocks.length} tradable stocks`);
+
+  // Convert to screener format for compatibility
+  let screenerResults = tradableStocks.map(convertTradableStockToScreenerFormat);
+
+  // Apply basic filtering from screenerParams
+  if (screenerParams.exchange) {
+    screenerResults = screenerResults.filter(s =>
+      s.exchangeShortName?.toLowerCase() === screenerParams.exchange?.toLowerCase() ||
+      s.exchange?.toLowerCase() === screenerParams.exchange?.toLowerCase()
+    );
+  }
+
+  if (screenerParams.isEtf !== undefined) {
+    screenerResults = screenerResults.filter(s => s.isEtf === screenerParams.isEtf);
+  }
+
+  if (screenerParams.priceMoreThan) {
+    screenerResults = screenerResults.filter(s => s.price >= screenerParams.priceMoreThan!);
+  }
+
+  if (screenerParams.priceLowerThan) {
+    screenerResults = screenerResults.filter(s => s.price <= screenerParams.priceLowerThan!);
+  }
+
+  // Apply limit
+  if (screenerParams.limit && screenerResults.length > screenerParams.limit) {
+    screenerResults = screenerResults.slice(0, screenerParams.limit);
+  }
+
+  console.log(`[FMP] After filtering: ${screenerResults.length} stocks`);
+
+  // OLD CODE (using deprecated stock-screener):
+  // const screenerResults = await fetchFMPStockScreener(screenerParams);
 
   if (screenerResults.length === 0) {
     console.log('[FMP] No stocks found in screener');
