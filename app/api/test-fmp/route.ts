@@ -34,89 +34,74 @@ export async function GET() {
   result.apiKeyConfigured = true;
   result.apiKeyPreview = `${apiKey.substring(0, 4)}...${apiKey.substring(apiKey.length - 4)}`;
 
-  // Test API key with a simple request using the NEW available-traded/list endpoint
-  // (stock-screener is deprecated as of August 31, 2025)
-  try {
-    const testUrl = `https://financialmodelingprep.com/api/v3/available-traded/list?apikey=${apiKey}`;
-    console.log('[FMP Test] Testing API with URL:', testUrl.replace(apiKey, 'REDACTED'));
+  // Test multiple endpoints to find which ones are working (not Legacy)
+  // Many endpoints became "Legacy" after August 31, 2025
+  const endpointsToTest = [
+    { name: 'Financial Statement Symbol Lists', url: `https://financialmodelingprep.com/api/v3/financial-statement-symbol-lists?apikey=${apiKey}` },
+    { name: 'S&P 500 Constituents', url: `https://financialmodelingprep.com/api/v3/sp500_constituent?apikey=${apiKey}` },
+    { name: 'NASDAQ Constituents', url: `https://financialmodelingprep.com/api/v3/nasdaq_constituent?apikey=${apiKey}` },
+    { name: 'Stock Quote (AAPL,MSFT)', url: `https://financialmodelingprep.com/api/v3/quote/AAPL,MSFT?apikey=${apiKey}` },
+  ];
 
-    const response = await fetch(testUrl, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-      },
-    });
+  const testResults = [];
 
-    const statusCode = response.status;
+  for (const endpoint of endpointsToTest) {
+    try {
+      console.log(`[FMP Test] Testing ${endpoint.name}:`, endpoint.url.replace(apiKey, 'REDACTED'));
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      result.testRequest = {
-        success: false,
-        statusCode,
-        error: `HTTP ${statusCode}: ${errorText}`,
-      };
+      const response = await fetch(endpoint.url, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+        },
+      });
 
-      return NextResponse.json({
-        ...result,
-        message: `❌ FMP API returned error ${statusCode}`,
-        hint: statusCode === 403
-          ? 'API key may be invalid or expired. Get a new key at https://financialmodelingprep.com/developer/docs'
-          : 'Check API key validity and FMP account status',
+      const data = await response.json();
+
+      if (response.ok && Array.isArray(data)) {
+        testResults.push({
+          endpoint: endpoint.name,
+          status: 'success',
+          stockCount: data.length,
+          sample: data.slice(0, 2),
+        });
+      } else {
+        testResults.push({
+          endpoint: endpoint.name,
+          status: 'failed',
+          statusCode: response.status,
+          error: data.error || data['Error Message'] || 'Unknown error',
+        });
+      }
+    } catch (error) {
+      testResults.push({
+        endpoint: endpoint.name,
+        status: 'error',
+        error: error instanceof Error ? error.message : String(error),
       });
     }
+  }
 
-    const data = await response.json();
+  // Find the first working endpoint
+  const workingEndpoint = testResults.find(r => r.status === 'success');
 
-    if (Array.isArray(data)) {
-      result.testRequest = {
-        success: true,
-        stockCount: data.length,
-      };
-
-      return NextResponse.json({
-        ...result,
-        message: `✅ FMP API is working! Retrieved ${data.length} tradable stocks`,
-        sampleStocks: data.slice(0, 3).map((s: { symbol: string; name: string; price?: number }) => ({
-          symbol: s.symbol,
-          name: s.name,
-          price: s.price,
-        })),
-        note: 'Using new available-traded/list endpoint (stock-screener deprecated Aug 31, 2025)',
-      });
-    } else if (data.error || data['Error Message']) {
-      result.testRequest = {
-        success: false,
-        error: data.error || data['Error Message'],
-      };
-
-      return NextResponse.json({
-        ...result,
-        message: '❌ FMP API returned an error',
-        hint: 'API key may be invalid. Get a new key at https://financialmodelingprep.com/developer/docs',
-      });
-    } else {
-      result.testRequest = {
-        success: false,
-        error: 'Unexpected response format',
-      };
-
-      return NextResponse.json({
-        ...result,
-        message: '❌ Unexpected response from FMP API',
-        responsePreview: JSON.stringify(data).substring(0, 200),
-      });
-    }
-  } catch (error) {
-    result.testRequest = {
-      success: false,
-      error: error instanceof Error ? error.message : String(error),
-    };
-
+  if (workingEndpoint) {
     return NextResponse.json({
       ...result,
-      message: '❌ Failed to connect to FMP API',
-      hint: 'Network error or API endpoint unavailable',
+      message: `✅ FMP API is working! Found working endpoint: ${workingEndpoint.endpoint}`,
+      workingEndpoint: workingEndpoint.endpoint,
+      stockCount: workingEndpoint.stockCount,
+      sampleStocks: workingEndpoint.sample,
+      allTestResults: testResults,
+      recommendation: `Use ${workingEndpoint.endpoint} endpoint to fetch stock data`,
     });
   }
+
+  // If no endpoint works, return details about all failures
+  return NextResponse.json({
+    ...result,
+    message: '❌ All tested endpoints failed (likely all are Legacy)',
+    allTestResults: testResults,
+    hint: 'All tested endpoints are Legacy. You may need to upgrade to a paid plan or find alternative endpoints.',
+  });
 }
