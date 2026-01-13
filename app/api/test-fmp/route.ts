@@ -34,9 +34,10 @@ export async function GET() {
   result.apiKeyConfigured = true;
   result.apiKeyPreview = `${apiKey.substring(0, 4)}...${apiKey.substring(apiKey.length - 4)}`;
 
-  // Test API key with a simple request
+  // Test API key with a simple request using the NEW available-traded/list endpoint
+  // (stock-screener is deprecated as of August 31, 2025)
   try {
-    const testUrl = `https://financialmodelingprep.com/api/v3/stock-screener?limit=5&apikey=${apiKey}`;
+    const testUrl = `https://financialmodelingprep.com/api/v3/available-traded/list?apikey=${apiKey}`;
     console.log('[FMP Test] Testing API with URL:', testUrl.replace(apiKey, 'REDACTED'));
 
     const response = await fetch(testUrl, {
@@ -75,11 +76,13 @@ export async function GET() {
 
       return NextResponse.json({
         ...result,
-        message: `✅ FMP API is working! Retrieved ${data.length} stocks`,
-        sampleStocks: data.slice(0, 3).map((s: { symbol: string; companyName: string }) => ({
+        message: `✅ FMP API is working! Retrieved ${data.length} tradable stocks`,
+        sampleStocks: data.slice(0, 3).map((s: { symbol: string; name: string; price?: number }) => ({
           symbol: s.symbol,
-          name: s.companyName,
+          name: s.name,
+          price: s.price,
         })),
+        note: 'Using new available-traded/list endpoint (stock-screener deprecated Aug 31, 2025)',
       });
     } else if (data.error || data['Error Message']) {
       result.testRequest = {
