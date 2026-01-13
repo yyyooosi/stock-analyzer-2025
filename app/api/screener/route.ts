@@ -15,11 +15,15 @@ import { mapFMPDataArrayToStockFundamentals, filterStocksWithSufficientData } fr
  * @returns 株式データの配列
  */
 async function fetchStocksFromFMP(filters: ScreenerFilters): Promise<StockFundamentals[]> {
+  console.log('[Screener] Starting fetchStocksFromFMP...');
   const apiKey = process.env.FMP_API_KEY;
 
   if (!apiKey) {
+    console.error('[Screener] FMP_API_KEY is NOT configured in environment variables');
     throw new Error('FMP_API_KEY is not configured. Please set the environment variable.');
   }
+
+  console.log('[Screener] FMP_API_KEY is configured:', `${apiKey.substring(0, 4)}...${apiKey.substring(apiKey.length - 4)}`);
 
   // Build FMP screener parameters from user filters
   const fmpParams: FMPScreenerParams = {
@@ -43,6 +47,7 @@ async function fetchStocksFromFMP(filters: ScreenerFilters): Promise<StockFundam
     limit: 1000, // FMP allows up to 1000 results per request
   };
 
+  console.log('[Screener] FMP params:', JSON.stringify(fmpParams, null, 2));
   console.log('[Screener] Fetching stocks from FMP API...');
   const fmpData = await fetchFMPComprehensiveStockData(fmpParams);
 

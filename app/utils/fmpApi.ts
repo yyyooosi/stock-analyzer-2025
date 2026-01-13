@@ -224,7 +224,9 @@ export async function fetchFMPStockScreener(
     const response = await fetch(url);
 
     if (!response.ok) {
-      throw new Error(`FMP API returned status ${response.status}`);
+      const errorText = await response.text();
+      console.error(`[FMP] API Error ${response.status}:`, errorText);
+      throw new Error(`FMP API returned status ${response.status}: ${errorText}`);
     }
 
     const data = await response.json();
@@ -232,6 +234,13 @@ export async function fetchFMPStockScreener(
     if (Array.isArray(data)) {
       console.log(`[FMP] Stock screener returned ${data.length} results`);
       return data;
+    }
+
+    // Check for error response
+    if (data.error || data['Error Message']) {
+      const errorMsg = data.error || data['Error Message'];
+      console.error('[FMP] API Error Response:', errorMsg);
+      throw new Error(`FMP API Error: ${errorMsg}`);
     }
 
     console.warn('[FMP] Unexpected response format:', data);
