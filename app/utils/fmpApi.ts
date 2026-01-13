@@ -546,6 +546,7 @@ export async function fetchFMPFinancialRatiosBatch(
  */
 export interface FMPCombinedStockData {
   screener: FMPStockScreenerResult;
+  quote?: FMPQuote; // Add quote data for additional metrics (PE, SMA, etc.)
   keyMetrics?: FMPKeyMetrics;
   ratios?: FMPFinancialRatios;
 }
@@ -627,6 +628,10 @@ export async function fetchFMPComprehensiveStockData(
   const allQuotes = quoteBatches.flat();
   console.log(`[FMP] Got ${allQuotes.length} quotes`);
 
+  // Create a map for quick quote lookup
+  const quoteMap = new Map<string, FMPQuote>();
+  allQuotes.forEach(quote => quoteMap.set(quote.symbol, quote));
+
   // Convert quotes to screener format for compatibility
   let screenerResults: FMPStockScreenerResult[] = allQuotes.map(quote => ({
     symbol: quote.symbol,
@@ -681,10 +686,13 @@ export async function fetchFMPComprehensiveStockData(
 
   console.log(`[FMP] Got ${screenerResults.length} stocks from screener`);
 
-  // Step 2: If detailed data not requested, return screener data only
+  // Step 2: If detailed data not requested, return screener data with quote data
   if (!fetchDetailedData) {
-    console.log('[FMP] Returning screener data only (detailed data not requested)');
-    return screenerResults.map((screener) => ({ screener }));
+    console.log('[FMP] Returning screener data with quote data (detailed data not requested)');
+    return screenerResults.map((screener) => ({
+      screener,
+      quote: quoteMap.get(screener.symbol),
+    }));
   }
 
   // Step 3: Fetch key metrics and ratios for each stock (in parallel, with batching)
@@ -710,6 +718,7 @@ export async function fetchFMPComprehensiveStockData(
     // Combine data
     const batchResults = batch.map((screenerData) => ({
       screener: screenerData,
+      quote: quoteMap.get(screenerData.symbol),
       keyMetrics: keyMetricsMap.get(screenerData.symbol),
       ratios: ratiosMap.get(screenerData.symbol),
     }));

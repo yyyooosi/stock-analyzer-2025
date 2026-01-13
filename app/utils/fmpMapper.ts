@@ -7,14 +7,15 @@ import type { FMPCombinedStockData } from './fmpApi';
 
 /**
  * Map FMP combined stock data to StockFundamentals format
- * @param fmpData - Combined FMP data (screener + optional key metrics + ratios)
+ * @param fmpData - Combined FMP data (screener + optional quote + key metrics + ratios)
  * @returns StockFundamentals object
  *
- * Note: When keyMetrics and ratios are not provided (to save API calls),
- * many fields will be null. This is acceptable for initial screening.
+ * Note: Quote data provides PE, SMA50, SMA200, EPS which are sufficient for basic screening.
+ * When keyMetrics and ratios are not provided (to save API calls),
+ * we rely on quote data for most valuation metrics.
  */
 export function mapFMPDataToStockFundamentals(fmpData: FMPCombinedStockData): StockFundamentals {
-  const { screener, keyMetrics, ratios } = fmpData;
+  const { screener, quote, keyMetrics, ratios } = fmpData;
 
   // Basic info
   const stock: StockFundamentals = {
@@ -25,11 +26,11 @@ export function mapFMPDataToStockFundamentals(fmpData: FMPCombinedStockData): St
     marketCap: screener.marketCap || 0,
     marketCapUSD: screener.marketCap || 0,
     price: screener.price || 0,
-    change: 0, // Will be updated by real-time price fetch
-    changePercent: 0, // Will be updated by real-time price fetch
+    change: quote?.change ?? 0,
+    changePercent: quote?.changesPercentage ?? 0,
 
-    // Valuation metrics from key metrics and ratios
-    per: keyMetrics?.peRatioTTM ?? ratios?.priceEarningsRatio ?? null,
+    // Valuation metrics - prioritize quote data, then key metrics, then ratios
+    per: quote?.pe ?? keyMetrics?.peRatioTTM ?? ratios?.priceEarningsRatio ?? null,
     pbr: keyMetrics?.pbRatioTTM ?? ratios?.priceToBookRatio ?? null,
     peg: ratios?.priceEarningsToGrowthRatio ?? null,
     psRatio: keyMetrics?.priceToSalesRatioTTM ?? ratios?.priceToSalesRatio ?? null,
@@ -67,14 +68,14 @@ export function mapFMPDataToStockFundamentals(fmpData: FMPCombinedStockData): St
     consecutiveDividendYears: null, // FMP doesn't provide this in free tier
     payoutRatio: keyMetrics?.payoutRatioTTM ?? ratios?.payoutRatio ?? null,
 
-    // Technical indicators (not available from FMP, will need to calculate or fetch separately)
-    sma50: null,
-    sma200: null,
-    rsi: null,
-    macdSignal: 'neutral',
-    volumeChange: null,
-    week52High: null,
-    week52HighDistance: null,
+    // Technical indicators - use quote data when available
+    sma50: quote?.priceAvg50 ?? null,
+    sma200: quote?.priceAvg200 ?? null,
+    rsi: null, // Not available from FMP quote endpoint
+    macdSignal: 'neutral', // Not available from FMP quote endpoint
+    volumeChange: quote && quote.avgVolume > 0 ? ((quote.volume - quote.avgVolume) / quote.avgVolume) * 100 : null,
+    week52High: quote?.yearHigh ?? null,
+    week52HighDistance: quote && quote.yearHigh > 0 ? ((quote.price - quote.yearHigh) / quote.yearHigh) * 100 : null,
 
     // Twitter/X sentiment (not available from FMP)
     twitterMentionCount30d: null,
