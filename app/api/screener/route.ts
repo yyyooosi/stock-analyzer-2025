@@ -7,6 +7,8 @@ import {
   matchesFilters,
 } from '@/app/utils/screener';
 import { fetchStockQuote } from '@/app/utils/stockQuote';
+import { fetchFMPComprehensiveStockData, FMPScreenerParams } from '@/app/utils/fmpApi';
+import { mapFMPDataArrayToStockFundamentals, filterStocksWithSufficientData } from '@/app/utils/fmpMapper';
 
 // Helper function to enrich stock data with new fields
 function enrichStockData(stock: Partial<StockFundamentals>): StockFundamentals {
@@ -557,6 +559,65 @@ async function updateStockPricesFromAPI(
   return updatedStocks;
 }
 
+/**
+ * FMP APIから全米国株のデータを取得
+ * @param filters - ユーザーのフィルター条件
+ * @returns 株式データの配列
+ */
+async function fetchStocksFromFMP(filters: ScreenerFilters): Promise<StockFundamentals[]> {
+  const apiKey = process.env.FMP_API_KEY;
+
+  if (!apiKey) {
+    console.warn('[Screener] FMP API key not configured, using sample data');
+    return [];
+  }
+
+  try {
+    // Build FMP screener parameters from user filters
+    const fmpParams: FMPScreenerParams = {
+      // Only get actively trading US stocks
+      isActivelyTrading: true,
+      exchange: undefined, // Include all US exchanges (NYSE, NASDAQ, AMEX)
+
+      // Market cap filters
+      marketCapMoreThan: filters.marketCapMin || filters.marketCapUSDMin || 100_000_000, // Default: $100M minimum
+      marketCapLowerThan: filters.marketCapMax || filters.marketCapUSDMax,
+
+      // Dividend filters
+      dividendMoreThan: filters.dividendYieldMin ? filters.dividendYieldMin / 100 : undefined,
+      dividendLowerThan: filters.dividendYieldMax ? filters.dividendYieldMax / 100 : undefined,
+
+      // Sector filter
+      sector: filters.sectors && filters.sectors.length === 1 ? filters.sectors[0] : undefined,
+
+      // Set a reasonable limit to avoid excessive API calls
+      // Users can refine results with additional filters
+      limit: 1000, // FMP allows up to 1000 results per request
+    };
+
+    console.log('[Screener] Fetching stocks from FMP API...');
+    const fmpData = await fetchFMPComprehensiveStockData(fmpParams);
+
+    if (fmpData.length === 0) {
+      console.log('[Screener] No stocks found from FMP API');
+      return [];
+    }
+
+    // Map FMP data to StockFundamentals format
+    const stocks = mapFMPDataArrayToStockFundamentals(fmpData);
+
+    // Filter out stocks with insufficient data
+    const validStocks = filterStocksWithSufficientData(stocks);
+
+    console.log(`[Screener] FMP API returned ${validStocks.length} valid stocks`);
+
+    return validStocks;
+  } catch (error) {
+    console.error('[Screener] Error fetching from FMP API:', error);
+    return [];
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -647,13 +708,25 @@ export async function GET(request: NextRequest) {
       filters.themes = themes.split(',');
     }
 
-    // リアルタイム株価を取得
-    console.log('[Screener] Fetching real-time prices...');
-    const stocksWithRealPrices = await updateStockPricesFromAPI(SAMPLE_STOCKS);
-    console.log('[Screener] Real-time prices fetched');
+    // Try to fetch stocks from FMP API, fallback to sample data if unavailable
+    console.log('[Screener] Starting stock data fetch...');
+    let stocks: StockFundamentals[] = [];
+
+    const fmpStocks = await fetchStocksFromFMP(filters);
+    if (fmpStocks.length > 0) {
+      console.log(`[Screener] Using FMP API data (${fmpStocks.length} stocks)`);
+      stocks = fmpStocks;
+    } else {
+      console.log('[Screener] FMP API unavailable, using sample data');
+      // Fallback to sample stocks with real-time prices
+      const stocksWithRealPrices = await updateStockPricesFromAPI(SAMPLE_STOCKS);
+      stocks = stocksWithRealPrices;
+    }
+
+    console.log(`[Screener] Processing ${stocks.length} stocks with filters...`);
 
     // Filter and score stocks
-    const results: ScreenerResult[] = stocksWithRealPrices
+    const results: ScreenerResult[] = stocks
       .filter((stock) => matchesFilters(stock, filters))
       .map((stock) => ({
         ...stock,

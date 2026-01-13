@@ -5,9 +5,11 @@
 ## 機能
 
 - 📊 **リアルタイム株価データ取得** - Alpha Vantage APIを使用
+- 🔍 **全米国株スクリーニング** - Financial Modeling Prep APIで数千銘柄をスクリーニング
 - 🐦 **Twitter/Xセンチメント分析** - 暴落関連ツイートの感情分析
 - 📈 **インタラクティブチャート** - Chart.jsによる視覚化
 - 🔄 **バックテスト機能** - 予測精度の検証
+- 🎯 **高度なフィルタリング** - ファンダメンタル、テクニカル、配当など多様な条件
 - 🎨 **モダンUI** - Tailwind CSSによる洗練されたデザイン
 - 🔒 **セキュア** - APIキーはバックエンドで管理
 
@@ -45,17 +47,23 @@ cp .env.local.example .env.local
 `.env.local`を編集：
 
 ```bash
-# Alpha Vantage API Key (サーバーサイド専用)
+# Alpha Vantage API Key (株価データ取得用)
 ALPHA_VANTAGE_API_KEY=your_alpha_vantage_api_key_here
 
-# Twitter API Bearer Token (サーバーサイド専用)
+# Financial Modeling Prep API Key (スクリーナー用 - 推奨)
+FMP_API_KEY=your_fmp_api_key_here
+
+# Twitter API Bearer Token (センチメント分析用)
 TWITTER_BEARER_TOKEN=your_twitter_bearer_token_here
 ```
 
 #### APIキーの取得方法
 
-- **Alpha Vantage**: https://www.alphavantage.co/support/#api-key
+- **Alpha Vantage**: https://www.alphavantage.co/support/#api-key (無料: 25リクエスト/日)
+- **Financial Modeling Prep**: https://financialmodelingprep.com/developer/docs (無料: 250リクエスト/日)
 - **Twitter API**: https://developer.twitter.com/en/portal/dashboard
+
+**注意**: FMP_API_KEYが設定されていない場合、スクリーナーは15銘柄のサンプルデータで動作します。全米国株（1000+銘柄）をスクリーニングするには、FMP APIキーの設定が必要です。
 
 詳細は [ENVIRONMENT_VARIABLES.md](ENVIRONMENT_VARIABLES.md) を参照してください。
 
@@ -105,6 +113,13 @@ stock-analyzer-2025/
 - `GET /api/stock/quote?symbol=AAPL` - リアルタイム株価
 - `GET /api/stock/timeseries?symbol=AAPL` - 履歴データ
 
+### スクリーナー
+
+- `GET /api/screener?perMin=10&perMax=20&roeMin=15` - 株式スクリーニング
+  - FMP APIを使用して全米国株をスクリーニング
+  - ファンダメンタル、テクニカル、配当などの条件でフィルタリング
+  - スコアリングと順位付け
+
 ### Twitter検索
 
 - `GET /api/twitter/search?query=crash&max_results=100` - ツイート検索
@@ -116,8 +131,9 @@ stock-analyzer-2025/
 1. GitHubにプッシュ
 2. Vercelでプロジェクトをインポート
 3. 環境変数を設定:
-   - `ALPHA_VANTAGE_API_KEY`
-   - `TWITTER_BEARER_TOKEN`
+   - `ALPHA_VANTAGE_API_KEY` (必須)
+   - `FMP_API_KEY` (推奨 - 全米国株スクリーニング用)
+   - `TWITTER_BEARER_TOKEN` (オプション)
 4. デプロイ完了！
 
 詳細: https://vercel.com/docs
