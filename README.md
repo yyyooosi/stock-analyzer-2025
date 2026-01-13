@@ -65,7 +65,10 @@ TWITTER_BEARER_TOKEN=your_twitter_bearer_token_here
 
 **注意**: FMP_API_KEYが設定されていない場合、スクリーナーは15銘柄のサンプルデータで動作します。全米国株（1000+銘柄）をスクリーニングするには、FMP APIキーの設定が必要です。
 
-詳細は [ENVIRONMENT_VARIABLES.md](ENVIRONMENT_VARIABLES.md) を参照してください。
+**関連ドキュメント**:
+- **[docs/FMP_API_SETUP.md](docs/FMP_API_SETUP.md)** - FMP API の詳細設定ガイド
+- **[docs/SCREENING_API_GUIDE.md](docs/SCREENING_API_GUIDE.md)** - スクリーニングAPIの使用方法
+- **[__tests__/README.md](__tests__/README.md)** - テストの実行方法
 
 ### 4. 開発サーバーの起動
 
@@ -136,7 +139,18 @@ stock-analyzer-2025/
    - `TWITTER_BEARER_TOKEN` (オプション)
 4. デプロイ完了！
 
-詳細: https://vercel.com/docs
+詳細なデプロイ手順は **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** を参照してください。
+
+### 本番環境の動作確認
+
+デプロイ後、以下のスクリプトで本番環境のAPIが正常に動作しているか確認できます：
+
+```bash
+# 本番環境のテスト
+./scripts/test-production.sh https://your-app.vercel.app
+```
+
+または、**[PRODUCTION_CHECKLIST.md](PRODUCTION_CHECKLIST.md)** のチェックリストを使って手動で確認できます。
 
 ## トラブルシューティング
 
