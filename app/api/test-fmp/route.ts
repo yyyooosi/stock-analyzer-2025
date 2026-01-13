@@ -37,9 +37,10 @@ export async function GET() {
   // Test multiple endpoints to find which ones are working (not Legacy)
   // Many endpoints became "Legacy" after August 31, 2025
   const endpointsToTest = [
+    { name: 'Financial Statement Symbol Lists', url: `https://financialmodelingprep.com/api/v3/financial-statement-symbol-lists?apikey=${apiKey}` },
     { name: 'S&P 500 Constituents', url: `https://financialmodelingprep.com/api/v3/sp500_constituent?apikey=${apiKey}` },
     { name: 'NASDAQ Constituents', url: `https://financialmodelingprep.com/api/v3/nasdaq_constituent?apikey=${apiKey}` },
-    { name: 'Stock List', url: `https://financialmodelingprep.com/api/v3/stock/list?apikey=${apiKey}` },
+    { name: 'Stock Quote (AAPL,MSFT)', url: `https://financialmodelingprep.com/api/v3/quote/AAPL,MSFT?apikey=${apiKey}` },
   ];
 
   const testResults = [];

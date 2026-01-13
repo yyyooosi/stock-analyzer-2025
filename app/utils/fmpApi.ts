@@ -69,8 +69,7 @@ export interface FMPStockScreenerResult {
 }
 
 /**
- * Response from /api/v3/available-traded/list endpoint
- * This is the NEW recommended endpoint (Stock Screener API is deprecated)
+ * Response from /api/v3/available-traded/list endpoint (DEPRECATED - Legacy as of Aug 31, 2025)
  */
 export interface FMPTradableStock {
   symbol: string;
@@ -79,6 +78,36 @@ export interface FMPTradableStock {
   exchange: string;
   exchangeShortName?: string;
   type?: string; // "stock", "etf", "trust", etc.
+}
+
+/**
+ * Response from /api/v3/quote/{symbols} endpoint
+ * Get quotes for multiple stocks (comma-separated symbols)
+ * This is a WORKING endpoint (not Legacy) for free tier as of 2026
+ */
+export interface FMPQuote {
+  symbol: string;
+  name: string;
+  price: number;
+  changesPercentage: number;
+  change: number;
+  dayLow: number;
+  dayHigh: number;
+  yearHigh: number;
+  yearLow: number;
+  marketCap: number;
+  priceAvg50: number;
+  priceAvg200: number;
+  volume: number;
+  avgVolume: number;
+  exchange: string;
+  open: number;
+  previousClose: number;
+  eps: number;
+  pe: number;
+  earningsAnnouncement?: string;
+  sharesOutstanding: number;
+  timestamp: number;
 }
 
 export interface FMPKeyMetrics {
@@ -205,11 +234,11 @@ export interface FMPFinancialRatios {
 }
 
 /**
- * Fetch list of tradable stocks from FMP
- * This replaces the deprecated stock-screener endpoint
- * @returns Array of tradable stocks
+ * Fetch list of stock symbols from FMP
+ * Uses /api/v3/financial-statement-symbol-lists endpoint (NOT Legacy, works with free tier)
+ * @returns Array of stock symbols
  */
-export async function fetchFMPTradableStocks(): Promise<FMPTradableStock[]> {
+export async function fetchFMPSymbolsList(): Promise<string[]> {
   const apiKey = process.env.FMP_API_KEY;
 
   if (!apiKey) {
@@ -217,9 +246,9 @@ export async function fetchFMPTradableStocks(): Promise<FMPTradableStock[]> {
     return [];
   }
 
-  const url = `${FMP_BASE_URL}/available-traded/list?apikey=${apiKey}`;
+  const url = `${FMP_BASE_URL}/financial-statement-symbol-lists?apikey=${apiKey}`;
 
-  console.log(`[FMP] Fetching tradable stocks list: ${url.replace(apiKey, 'API_KEY_HIDDEN')}`);
+  console.log(`[FMP] Fetching financial statement symbol lists: ${url.replace(apiKey, 'API_KEY_HIDDEN')}`);
 
   try {
     const response = await fetch(url);
@@ -233,7 +262,7 @@ export async function fetchFMPTradableStocks(): Promise<FMPTradableStock[]> {
     const data = await response.json();
 
     if (Array.isArray(data)) {
-      console.log(`[FMP] Tradable stocks list returned ${data.length} results`);
+      console.log(`[FMP] Symbol lists returned ${data.length} symbols`);
       return data;
     }
 
@@ -245,6 +274,86 @@ export async function fetchFMPTradableStocks(): Promise<FMPTradableStock[]> {
     }
 
     console.warn('[FMP] Unexpected response format:', data);
+    return [];
+  } catch (error) {
+    console.error('[FMP] Symbol lists error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Fetch stock quotes for multiple symbols
+ * Uses /api/v3/quote/{symbols} endpoint (NOT Legacy, works with free tier)
+ * @param symbols - Array of stock symbols or comma-separated string
+ * @returns Array of stock quotes
+ */
+export async function fetchFMPStockQuotes(symbols: string[] | string): Promise<FMPQuote[]> {
+  const apiKey = process.env.FMP_API_KEY;
+
+  if (!apiKey) {
+    console.warn('[FMP] API key not configured');
+    return [];
+  }
+
+  const symbolsStr = Array.isArray(symbols) ? symbols.join(',') : symbols;
+  const url = `${FMP_BASE_URL}/quote/${symbolsStr}?apikey=${apiKey}`;
+
+  console.log(`[FMP] Fetching quotes for ${Array.isArray(symbols) ? symbols.length : 'multiple'} symbols`);
+
+  try {
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[FMP] API Error ${response.status}:`, errorText);
+      throw new Error(`FMP API returned status ${response.status}: ${errorText}`);
+    }
+
+    const data = await response.json();
+
+    if (Array.isArray(data)) {
+      console.log(`[FMP] Quotes returned ${data.length} results`);
+      return data;
+    }
+
+    // Check for error response
+    if (data.error || data['Error Message']) {
+      const errorMsg = data.error || data['Error Message'];
+      console.error('[FMP] API Error Response:', errorMsg);
+      throw new Error(`FMP API Error: ${errorMsg}`);
+    }
+
+    console.warn('[FMP] Unexpected response format:', data);
+    return [];
+  } catch (error) {
+    console.error('[FMP] Stock quotes error:', error);
+    throw error;
+  }
+}
+
+/**
+ * DEPRECATED: Fetch list of tradable stocks from FMP
+ * @deprecated available-traded/list is a Legacy endpoint. Use fetchFMPSymbolsList instead.
+ */
+export async function fetchFMPTradableStocks(): Promise<FMPTradableStock[]> {
+  console.warn('[FMP] fetchFMPTradableStocks is deprecated. Use fetchFMPSymbolsList + fetchFMPStockQuotes instead.');
+
+  const apiKey = process.env.FMP_API_KEY;
+  if (!apiKey) {
+    return [];
+  }
+
+  const url = `${FMP_BASE_URL}/available-traded/list?apikey=${apiKey}`;
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`FMP API returned status ${response.status}`);
+    }
+    const data = await response.json();
+    if (Array.isArray(data)) {
+      return data;
+    }
     return [];
   } catch (error) {
     console.error('[FMP] Tradable stocks list error:', error);
@@ -476,33 +585,79 @@ export async function fetchFMPComprehensiveStockData(
   screenerParams: FMPScreenerParams = {},
   fetchDetailedData: boolean = false
 ): Promise<FMPCombinedStockData[]> {
-  console.log('[FMP] Fetching comprehensive stock data...');
+  console.log('[FMP] Fetching comprehensive stock data using NEW working endpoints...');
 
-  // Step 1: Get stocks using NEW available-traded/list endpoint
-  // (stock-screener is deprecated as of August 31, 2025)
-  console.log('[FMP] Using available-traded/list endpoint (stock-screener deprecated)');
-  const tradableStocks = await fetchFMPTradableStocks();
+  // Step 1: Get stock symbols from working endpoints
+  // NEW APPROACH: Use financial-statement-symbol-lists endpoint (NOT Legacy)
+  console.log('[FMP] Using financial-statement-symbol-lists endpoint (working on free tier)');
 
-  if (tradableStocks.length === 0) {
-    console.log('[FMP] No tradable stocks found');
+  let symbols = await fetchFMPSymbolsList();
+
+  if (symbols.length === 0) {
+    console.log('[FMP] No symbols found from symbol lists');
     return [];
   }
 
-  console.log(`[FMP] Got ${tradableStocks.length} tradable stocks`);
+  console.log(`[FMP] Got ${symbols.length} symbols from symbol lists`);
 
-  // Convert to screener format for compatibility
-  let screenerResults = tradableStocks.map(convertTradableStockToScreenerFormat);
+  // Step 2: Limit symbols to reasonable number for free tier (250 requests/day)
+  // Get quotes in batches of 100 symbols at a time
+  const limit = screenerParams.limit || 1000;
+  const symbolsToFetch = symbols.slice(0, Math.min(limit, 1000));
+
+  console.log(`[FMP] Fetching quotes for ${symbolsToFetch.length} symbols`);
+
+  // Batch symbols into groups of 100 for quote API
+  const quoteBatchSize = 100;
+  const quoteBatches: FMPQuote[][] = [];
+
+  for (let i = 0; i < symbolsToFetch.length; i += quoteBatchSize) {
+    const batch = symbolsToFetch.slice(i, i + quoteBatchSize);
+    console.log(`[FMP] Fetching quote batch ${Math.floor(i / quoteBatchSize) + 1}/${Math.ceil(symbolsToFetch.length / quoteBatchSize)}`);
+
+    const quotes = await fetchFMPStockQuotes(batch);
+    quoteBatches.push(quotes);
+
+    // Small delay to avoid rate limits
+    if (i + quoteBatchSize < symbolsToFetch.length) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+  }
+
+  const allQuotes = quoteBatches.flat();
+  console.log(`[FMP] Got ${allQuotes.length} quotes`);
+
+  // Convert quotes to screener format for compatibility
+  let screenerResults: FMPStockScreenerResult[] = allQuotes.map(quote => ({
+    symbol: quote.symbol,
+    companyName: quote.name,
+    price: quote.price,
+    marketCap: quote.marketCap,
+    volume: quote.volume,
+    exchange: quote.exchange,
+    exchangeShortName: quote.exchange,
+    sector: 'Unknown', // Not available in quote endpoint
+    industry: 'Unknown',
+    beta: 0,
+    lastAnnualDividend: 0,
+    country: 'US',
+    isEtf: false,
+    isActivelyTrading: true,
+  }));
 
   // Apply basic filtering from screenerParams
   if (screenerParams.exchange) {
     screenerResults = screenerResults.filter(s =>
-      s.exchangeShortName?.toLowerCase() === screenerParams.exchange?.toLowerCase() ||
-      s.exchange?.toLowerCase() === screenerParams.exchange?.toLowerCase()
+      s.exchange?.toLowerCase().includes(screenerParams.exchange?.toLowerCase() || '')
     );
   }
 
-  if (screenerParams.isEtf !== undefined) {
-    screenerResults = screenerResults.filter(s => s.isEtf === screenerParams.isEtf);
+  if (screenerParams.marketCapMoreThan) {
+    screenerResults = screenerResults.filter(s => s.marketCap >= screenerParams.marketCapMoreThan!);
+  }
+
+  if (screenerParams.marketCapLowerThan) {
+    screenerResults = screenerResults.filter(s => s.marketCap <= screenerParams.marketCapLowerThan!);
   }
 
   if (screenerParams.priceMoreThan) {
@@ -513,15 +668,11 @@ export async function fetchFMPComprehensiveStockData(
     screenerResults = screenerResults.filter(s => s.price <= screenerParams.priceLowerThan!);
   }
 
-  // Apply limit
-  if (screenerParams.limit && screenerResults.length > screenerParams.limit) {
-    screenerResults = screenerResults.slice(0, screenerParams.limit);
+  if (screenerParams.volumeMoreThan) {
+    screenerResults = screenerResults.filter(s => s.volume >= screenerParams.volumeMoreThan!);
   }
 
   console.log(`[FMP] After filtering: ${screenerResults.length} stocks`);
-
-  // OLD CODE (using deprecated stock-screener):
-  // const screenerResults = await fetchFMPStockScreener(screenerParams);
 
   if (screenerResults.length === 0) {
     console.log('[FMP] No stocks found in screener');
