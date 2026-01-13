@@ -235,7 +235,7 @@ export interface FMPFinancialRatios {
 
 /**
  * Fetch list of stock symbols from FMP
- * Uses /api/v3/financial-statement-symbol-lists endpoint (NOT Legacy, works with free tier)
+ * Uses /api/v3/available-traded/list endpoint (current working endpoint as of 2026)
  * @returns Array of stock symbols
  */
 export async function fetchFMPSymbolsList(): Promise<string[]> {
@@ -246,13 +246,15 @@ export async function fetchFMPSymbolsList(): Promise<string[]> {
     throw new Error('FMP_API_KEY is not configured');
   }
 
-  const url = `${FMP_BASE_URL}/financial-statement-symbol-lists?apikey=${apiKey}`;
+  // Use available-traded/list endpoint instead of financial-statement-symbol-lists
+  // The latter became Legacy after August 31, 2025
+  const url = `${FMP_BASE_URL}/available-traded/list?apikey=${apiKey}`;
 
-  console.log(`[FMP] Fetching financial statement symbol lists`);
+  console.log(`[FMP] Fetching available traded stocks list (updated endpoint)`);
   console.log(`[FMP] API Key (first 4 chars): ${apiKey.substring(0, 4)}...`);
 
   try {
-    console.log(`[FMP] Calling FMP API...`);
+    console.log(`[FMP] Calling FMP API: /available-traded/list`);
     const response = await fetch(url);
 
     console.log(`[FMP] Response status: ${response.status} ${response.statusText}`);
@@ -264,6 +266,8 @@ export async function fetchFMPSymbolsList(): Promise<string[]> {
       // Specific error messages
       if (response.status === 401) {
         throw new Error(`FMP API authentication failed (401). Please check your API key.`);
+      } else if (response.status === 403) {
+        throw new Error(`FMP API access forbidden (403). This endpoint may require a paid plan or the endpoint is deprecated.`);
       } else if (response.status === 429) {
         throw new Error(`FMP API rate limit exceeded (429). Free tier allows 250 requests/day.`);
       } else {
@@ -273,9 +277,12 @@ export async function fetchFMPSymbolsList(): Promise<string[]> {
 
     const data = await response.json();
 
+    // The available-traded/list endpoint returns an array of objects with symbol property
     if (Array.isArray(data)) {
-      console.log(`[FMP] Symbol lists returned ${data.length} symbols`);
-      return data;
+      // Extract symbols from the response
+      const symbols = data.map((item: { symbol: string }) => item.symbol).filter(Boolean);
+      console.log(`[FMP] Available-traded list returned ${symbols.length} symbols`);
+      return symbols;
     }
 
     // Check for error response
@@ -608,11 +615,11 @@ export async function fetchFMPComprehensiveStockData(
   screenerParams: FMPScreenerParams = {},
   fetchDetailedData: boolean = false
 ): Promise<FMPCombinedStockData[]> {
-  console.log('[FMP] Fetching comprehensive stock data using NEW working endpoints...');
+  console.log('[FMP] Fetching comprehensive stock data using current working endpoints...');
 
   // Step 1: Get stock symbols from working endpoints
-  // NEW APPROACH: Use financial-statement-symbol-lists endpoint (NOT Legacy)
-  console.log('[FMP] Using financial-statement-symbol-lists endpoint (working on free tier)');
+  // UPDATED 2026: Use available-traded/list endpoint (replaces financial-statement-symbol-lists which became Legacy)
+  console.log('[FMP] Using available-traded/list endpoint (current working endpoint)');
 
   let symbols = await fetchFMPSymbolsList();
 

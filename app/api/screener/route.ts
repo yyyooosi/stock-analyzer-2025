@@ -243,6 +243,19 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Check for forbidden/deprecated endpoint errors
+    if (error instanceof Error && error.message.includes('403')) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'FMP APIエンドポイントが利用できません',
+          details: 'APIエンドポイントが非推奨になったか、有料プランが必要な可能性があります。',
+          errorType: 'FORBIDDEN',
+        },
+        { status: 403 }
+      );
+    }
+
     // Generic error
     return NextResponse.json(
       {
