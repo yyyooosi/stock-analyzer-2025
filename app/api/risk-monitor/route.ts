@@ -17,7 +17,7 @@ import {
   shouldSendNotification,
 } from "@/app/utils/notifications";
 
-let lastNotificationTime: Date | null = null;
+let lastNotificationTime: Date | undefined = undefined;
 
 export async function GET(request: NextRequest) {
   try {

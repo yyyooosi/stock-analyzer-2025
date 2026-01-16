@@ -11,7 +11,7 @@ export async function getMarketValuationMetrics() {
     });
 
     // Fetch earnings data (simplified)
-    const sp500Current = sp500Data.regularMarketPrice || 5000;
+    const sp500Current = (sp500Data as any)?.regularMarketPrice || 5000;
 
     // Shiller P/E ratio calculation (simplified estimate)
     // Real CAPE ratio would need 10 years of data
@@ -59,15 +59,22 @@ async function getIndexConcentration(): Promise<number> {
   try {
     // Fetch top 7 stocks in S&P 500 (approximation of concentration)
     const megacapStocks = ["NVDA", "MSFT", "AAPL", "GOOGL", "AMZN", "TSLA", "META"];
-    const quotes = await Promise.all(
-      megacapStocks.map((symbol) =>
-        yahooFinance
-          .quote({ symbol, modules: ["price"] })
-          .catch(() => ({ regularMarketPrice: 0 }))
-      )
+    const quotes = await Promise.allSettled(
+      megacapStocks.map(async (symbol) => {
+        try {
+          return await yahooFinance.quote({ symbol, modules: ["price"] });
+        } catch {
+          return { regularMarketPrice: 0 };
+        }
+      })
     );
 
-    const megacapWeight = quotes.reduce((sum, q) => sum + (q.regularMarketPrice || 0), 0);
+    const megacapWeight = quotes.reduce((sum, result) => {
+      if (result.status === "fulfilled") {
+        return sum + ((result.value as any)?.regularMarketPrice || 0);
+      }
+      return sum;
+    }, 0);
     // S&P 500 approximate total
     const sp500Total = 500000;
     const concentration = (megacapWeight / sp500Total) * 100;
@@ -83,15 +90,22 @@ async function getLeveragedETFBalance(): Promise<number> {
   try {
     // Check leveraged ETF volumes
     const leveragedETFs = ["UPRO", "SSO", "SPXL", "SQQQ", "SPXS"];
-    const volumes = await Promise.all(
-      leveragedETFs.map((symbol) =>
-        yahooFinance
-          .quote({ symbol, modules: ["price"] })
-          .catch(() => ({ regularMarketPrice: 0 }))
-      )
+    const volumes = await Promise.allSettled(
+      leveragedETFs.map(async (symbol) => {
+        try {
+          return await yahooFinance.quote({ symbol, modules: ["price"] });
+        } catch {
+          return { regularMarketPrice: 0 };
+        }
+      })
     );
 
-    const totalNotional = volumes.reduce((sum, q) => sum + (q.regularMarketPrice || 0), 0) * 1000; // Simplified
+    const totalNotional = volumes.reduce((sum, result) => {
+      if (result.status === "fulfilled") {
+        return sum + ((result.value as any)?.regularMarketPrice || 0);
+      }
+      return sum;
+    }, 0) * 1000; // Simplified
     return totalNotional;
   } catch (error) {
     console.error("Error fetching leveraged ETF balance:", error);
@@ -105,7 +119,7 @@ export async function getSP500Price(): Promise<number> {
       symbol: "^GSPC",
       modules: ["price"],
     });
-    return data.regularMarketPrice || 5000;
+    return (data as any)?.regularMarketPrice || 5000;
   } catch (error) {
     console.error("Error fetching S&P 500 price:", error);
     return 5000;
