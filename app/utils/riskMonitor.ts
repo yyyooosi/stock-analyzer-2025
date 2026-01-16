@@ -10,6 +10,7 @@ export interface RiskIndicator {
   description?: string; // 日本語説明
   previousValue?: number; // 前日の値
   changePercent?: number; // 前日比（%）
+  isEstimated?: boolean; // APIで取得できなかった場合true（推定値）
 }
 
 export interface CategoryRiskScore {

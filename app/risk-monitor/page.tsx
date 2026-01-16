@@ -54,6 +54,13 @@ export default function RiskMonitorPage() {
     return value.toFixed(2);
   };
 
+  const getEstimatedLabel = (indicator: RiskIndicator): string => {
+    if (indicator.isEstimated) {
+      return " [推定値]";
+    }
+    return "";
+  };
+
   const getUnit = (name: string): string => {
     if (name.includes("Rate") || name.includes("Spread") || name.includes("Yield")) return "%";
     if (name.includes("Concentration")) return "%";
@@ -154,7 +161,7 @@ export default function RiskMonitorPage() {
                         <div className="flex justify-between truncate hover:underline cursor-help mb-0.5">
                           <span className="truncate flex-1">{ind.name}</span>
                           <span className={getRiskTextColor(ind.normalizedScore)} style={{ minWidth: "40px", textAlign: "right" }}>
-                            {formatValue(ind)}{getUnit(ind.name)}
+                            {formatValue(ind)}{getUnit(ind.name)}{ind.isEstimated ? " [推定]" : ""}
                           </span>
                         </div>
                       </Tooltip>
@@ -206,7 +213,7 @@ export default function RiskMonitorPage() {
                           <div className="font-semibold truncate hover:underline cursor-help">{indicator.name}</div>
                         </Tooltip>
                         <div className={`text-sm font-bold ${getRiskTextColor(indicator.normalizedScore)}`}>
-                          {formatValue(indicator)}{getUnit(indicator.name)}
+                          {formatValue(indicator)}{getUnit(indicator.name)}{indicator.isEstimated ? " [推定]" : ""}
                         </div>
                       </div>
                       <div className={`ml-2 px-2 py-1 rounded ${getRiskColor(indicator.normalizedScore)} text-white font-bold`}>
@@ -269,7 +276,7 @@ export default function RiskMonitorPage() {
                         <div className="text-gray-400 truncate hover:underline cursor-help">{ind.name}</div>
                       </Tooltip>
                       <div className={`font-bold ${getRiskTextColor(ind.normalizedScore)}`}>
-                        {formatValue(ind)}{getUnit(ind.name)}
+                        {formatValue(ind)}{getUnit(ind.name)}{ind.isEstimated ? " [推定]" : ""}
                       </div>
                       {ind.changePercent !== undefined && (
                         <div className="text-gray-500 text-xs">

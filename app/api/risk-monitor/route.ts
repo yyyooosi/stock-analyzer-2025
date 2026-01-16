@@ -91,6 +91,7 @@ export async function GET(request: NextRequest) {
         ),
         direction: macroData.federalFundsRate > 4 ? "up" : "down",
         historicalRange: [0, 8],
+        isEstimated: macroData.federalFundsRateEstimated,
       },
       {
         name: "Credit Spreads",
@@ -104,6 +105,7 @@ export async function GET(request: NextRequest) {
         ),
         direction: macroData.creditSpreads > 400 ? "up" : "down",
         historicalRange: [200, 800],
+        isEstimated: macroData.creditSpreadsEstimated,
       },
       {
         name: "M2 Money Supply",
@@ -117,6 +119,7 @@ export async function GET(request: NextRequest) {
         ),
         direction: macroData.m2MoneySupply < 20000000 ? "down" : "up",
         historicalRange: [15000000, 25000000],
+        isEstimated: macroData.m2MoneySupplyEstimated,
       },
     ];
 
@@ -133,6 +136,7 @@ export async function GET(request: NextRequest) {
         ),
         direction: macroData.unemploymentRate > 5 ? "up" : "down",
         historicalRange: [3.0, 10.0],
+        isEstimated: macroData.unemploymentRateEstimated,
       },
       {
         name: "CPI (Inflation)",
@@ -146,6 +150,7 @@ export async function GET(request: NextRequest) {
         ),
         direction: macroData.cpi > 300 ? "up" : "down",
         historicalRange: [250, 350],
+        isEstimated: macroData.cpiEstimated,
       },
       {
         name: "Yield Curve Inversion",
@@ -159,6 +164,7 @@ export async function GET(request: NextRequest) {
         ),
         direction: macroData.yieldCurve < 0.5 ? "down" : "up",
         historicalRange: [-1, 2],
+        isEstimated: macroData.yieldCurveEstimated,
       },
     ];
 
@@ -175,6 +181,7 @@ export async function GET(request: NextRequest) {
         ),
         direction: macroData.vixIndex > 20 ? "up" : "down",
         historicalRange: [10, 60],
+        isEstimated: macroData.vixIndexEstimated,
       },
       {
         name: "Index Concentration",
@@ -217,6 +224,7 @@ export async function GET(request: NextRequest) {
         ),
         direction: macroData.highYieldYield > 7 ? "up" : "down",
         historicalRange: [4.0, 12.0],
+        isEstimated: macroData.highYieldYieldEstimated,
       },
       {
         name: "Earnings Yield Spread",
