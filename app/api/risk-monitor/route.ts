@@ -160,9 +160,9 @@ export async function GET(request: NextRequest) {
           macroData.yieldCurve,
           -1,
           2,
-          false // Inverted/flat = higher risk
+          true // Inverted (negative) = higher risk, so use inverse scale
         ),
-        direction: macroData.yieldCurve < 0.5 ? "down" : "up",
+        direction: macroData.yieldCurve < 0 ? "down" : "up",
         historicalRange: [-1, 2],
         isEstimated: macroData.yieldCurveEstimated,
       },
