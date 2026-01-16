@@ -8,6 +8,7 @@ import {
   getCategoryName,
   calculateCrashSimilarities,
   generateAlerts,
+  getIndicatorDescription,
 } from "@/app/utils/riskMonitor";
 import { getMacroeconomicData } from "@/app/utils/fredAPI";
 import { getMarketValuationMetrics, getSP500Price } from "@/app/utils/marketData";

@@ -1,7 +1,26 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { RiskAssessment, RiskIndicator, CategoryRiskScore } from "@/app/utils/riskMonitor";
+import { RiskAssessment, RiskIndicator, CategoryRiskScore, getIndicatorDescription } from "@/app/utils/riskMonitor";
+
+// ツールチップコンポーネント
+function Tooltip({ text, children }: { text: string; children: React.ReactNode }) {
+  const [showTooltip, setShowTooltip] = useState(false);
+
+  return (
+    <div className="relative inline-block group cursor-help">
+      <div onMouseEnter={() => setShowTooltip(true)} onMouseLeave={() => setShowTooltip(false)}>
+        {children}
+      </div>
+      {showTooltip && (
+        <div className="absolute z-50 w-48 p-2 text-xs bg-gray-950 text-white border border-gray-600 rounded shadow-lg bottom-full left-1/2 transform -translate-x-1/2 mb-2 pointer-events-none">
+          <div className="break-words">{text}</div>
+          <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-950"></div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function RiskMonitorPage() {
   const [assessment, setAssessment] = useState<RiskAssessment | null>(null);
@@ -141,7 +160,9 @@ export default function RiskMonitorPage() {
                         {cat.indicators.map((ind, idx) => (
                           <div key={idx} className="text-xs bg-gray-800 rounded p-1">
                             <div className="flex justify-between">
-                              <span className="truncate">{ind.name}</span>
+                              <Tooltip text={getIndicatorDescription(ind.name)}>
+                                <span className="truncate hover:underline">{ind.name}</span>
+                              </Tooltip>
                               <span className={getRiskTextColor(ind.normalizedScore)}>
                                 {formatValue(ind)}{getUnit(ind.name)}
                               </span>
@@ -180,7 +201,9 @@ export default function RiskMonitorPage() {
                   <div key={idx} className="bg-gray-900 rounded p-2 border-l-2 border-red-500">
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
-                        <div className="font-semibold truncate">{indicator.name}</div>
+                        <Tooltip text={getIndicatorDescription(indicator.name)}>
+                          <div className="font-semibold truncate hover:underline cursor-help">{indicator.name}</div>
+                        </Tooltip>
                         <div className={`text-sm font-bold ${getRiskTextColor(indicator.normalizedScore)}`}>
                           {formatValue(indicator)}{getUnit(indicator.name)}
                         </div>
@@ -233,7 +256,9 @@ export default function RiskMonitorPage() {
                   ?.indicators.slice(0, 4)
                   .map((ind, idx) => (
                     <div key={idx} className="bg-gray-900 rounded p-1">
-                      <div className="text-gray-400 truncate">{ind.name}</div>
+                      <Tooltip text={getIndicatorDescription(ind.name)}>
+                        <div className="text-gray-400 truncate hover:underline cursor-help">{ind.name}</div>
+                      </Tooltip>
                       <div className={`font-bold ${getRiskTextColor(ind.normalizedScore)}`}>
                         {formatValue(ind)}{getUnit(ind.name)}
                       </div>
