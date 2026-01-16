@@ -3,6 +3,20 @@
 const FRED_BASE_URL = "https://api.stlouisfed.org/fred/series/data";
 const FRED_API_KEY = process.env.FRED_API_KEY;
 
+// Development mode: use mock data to test without network dependency
+const USE_MOCK_DATA = process.env.FRED_MOCK_DATA === "true";
+
+const mockFREDData: Record<string, number> = {
+  FEDFUNDS: 5.33,     // Federal Funds Rate
+  UNRATE: 4.2,        // Unemployment Rate
+  CPIAUCSL: 318.5,    // CPI
+  M2SL: 21500000,     // M2 Money Supply
+  T10Y2Y: 0.45,       // Yield Curve
+  VIXCLS: 15.88,      // VIX Index
+  "BAMLH0A0HYM2": 350, // High Yield OAS
+  "BOGZ1FL103064003Q": 720000, // Margin Debt
+};
+
 interface FREDDataPoint {
   date: string;
   value: string;
@@ -18,6 +32,17 @@ interface FREDFetchResult {
 }
 
 async function fetchFREDData(seriesId: string): Promise<FREDFetchResult> {
+  // Use mock data for development/testing
+  if (USE_MOCK_DATA) {
+    const mockValue = mockFREDData[seriesId];
+    if (mockValue !== undefined) {
+      console.log(`[FRED API] Mock data for ${seriesId}: ${mockValue}`);
+      return { value: mockValue, success: true };
+    }
+    console.warn(`[FRED API] Mock data not found for ${seriesId}`);
+    return { value: 0, success: false };
+  }
+
   if (!FRED_API_KEY) {
     console.warn("FRED_API_KEY not configured");
     return { value: 0, success: false };
