@@ -8,6 +8,8 @@ export interface RiskIndicator {
   direction: "up" | "down" | "neutral"; // Higher value = higher risk
   historicalRange: [number, number];
   description?: string; // 日本語説明
+  previousValue?: number; // 前日の値
+  changePercent?: number; // 前日比（%）
 }
 
 export interface CategoryRiskScore {

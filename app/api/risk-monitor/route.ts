@@ -19,6 +19,13 @@ import {
 } from "@/app/utils/notifications";
 
 let lastNotificationTime: Date | undefined = undefined;
+let previousAssessment: RiskAssessment | undefined = undefined;
+
+// 前日比を計算するヘルパー関数
+function calculateChangePercent(currentValue: number, previousValue: number | undefined): number | undefined {
+  if (previousValue === undefined || previousValue === 0) return undefined;
+  return ((currentValue - previousValue) / previousValue) * 100;
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -320,6 +327,40 @@ export async function GET(request: NextRequest) {
         lastNotificationTime = new Date();
       }
     }
+
+    // 前日比を計算して追加
+    if (previousAssessment) {
+      // 前回のインジケーターをマップで管理（検索効率化）
+      const previousIndicatorMap = new Map<string, number>();
+      previousAssessment.categories.forEach((cat) => {
+        cat.indicators.forEach((ind) => {
+          previousIndicatorMap.set(ind.name, ind.value);
+        });
+      });
+
+      // 現在のアセスメントの各indicatorに前日比を追加
+      assessment.categories.forEach((cat) => {
+        cat.indicators.forEach((ind) => {
+          const prevValue = previousIndicatorMap.get(ind.name);
+          if (prevValue !== undefined) {
+            ind.previousValue = prevValue;
+            ind.changePercent = calculateChangePercent(ind.value, prevValue);
+          }
+        });
+      });
+
+      // topWarningsにも前日比を追加
+      assessment.topWarnings.forEach((ind) => {
+        const prevValue = previousIndicatorMap.get(ind.name);
+        if (prevValue !== undefined) {
+          ind.previousValue = prevValue;
+          ind.changePercent = calculateChangePercent(ind.value, prevValue);
+        }
+      });
+    }
+
+    // 前回のアセスメントを保存
+    previousAssessment = assessment;
 
     return NextResponse.json({
       success: true,

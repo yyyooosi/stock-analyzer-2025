@@ -26,7 +26,6 @@ export default function RiskMonitorPage() {
   const [assessment, setAssessment] = useState<RiskAssessment | null>(null);
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
-  const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
 
   const getRiskColor = (score: number): string => {
     if (score < 30) return "bg-green-900 border-green-600";
@@ -121,60 +120,62 @@ export default function RiskMonitorPage() {
       {/* Main Content */}
       <div className="flex-1 overflow-y-auto p-3">
         <div className="grid grid-cols-12 gap-3 h-full">
-          {/* Left Column: Categories + Alerts */}
-          <div className="col-span-3 flex flex-col gap-3">
-            {/* Category Scores */}
-            <div className="bg-gray-800 border border-gray-700 rounded p-3">
-              <h3 className="text-sm font-bold mb-2">📊 カテゴリースコア</h3>
-              <div className="space-y-2">
-                {assessment.categories.map((cat) => (
+          {/* Left Column: All Categories with Indicators */}
+          <div className="col-span-3 flex flex-col gap-3 overflow-y-auto">
+            {/* All Categories - Always Visible */}
+            {assessment.categories.map((cat) => (
+              <div key={cat.category} className="bg-gray-800 border border-gray-700 rounded p-2">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-xs font-bold">{cat.name}</h4>
+                  <span className={`text-xs font-bold ${getRiskTextColor(cat.score)}`}>
+                    {cat.score.toFixed(1)}
+                  </span>
+                </div>
+                <div className="w-full bg-gray-700 rounded-full h-1 mb-2">
                   <div
-                    key={cat.category}
-                    className="bg-gray-900 rounded p-2 cursor-pointer hover:bg-gray-850"
-                    onClick={() => setExpandedCategory(expandedCategory === cat.category ? null : cat.category)}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold">{cat.name}</span>
-                      <span className={`text-sm font-bold ${getRiskTextColor(cat.score)}`}>
-                        {cat.score.toFixed(1)}
-                      </span>
-                    </div>
-                    <div className="w-full bg-gray-700 rounded-full h-1 mt-1">
-                      <div
-                        className={`h-1 rounded-full ${
-                          cat.score < 30
-                            ? "bg-green-500"
-                            : cat.score < 50
-                              ? "bg-yellow-500"
-                              : cat.score < 70
-                                ? "bg-orange-500"
-                                : "bg-red-500"
-                        }`}
-                        style={{ width: `${cat.score}%` }}
-                      ></div>
-                    </div>
+                    className={`h-1 rounded-full ${
+                      cat.score < 30
+                        ? "bg-green-500"
+                        : cat.score < 50
+                          ? "bg-yellow-500"
+                          : cat.score < 70
+                            ? "bg-orange-500"
+                            : "bg-red-500"
+                    }`}
+                    style={{ width: `${cat.score}%` }}
+                  ></div>
+                </div>
 
-                    {/* Expanded Category Details */}
-                    {expandedCategory === cat.category && (
-                      <div className="mt-2 pt-2 border-t border-gray-700 space-y-1">
-                        {cat.indicators.map((ind, idx) => (
-                          <div key={idx} className="text-xs bg-gray-800 rounded p-1">
-                            <div className="flex justify-between">
-                              <Tooltip text={getIndicatorDescription(ind.name)}>
-                                <span className="truncate hover:underline">{ind.name}</span>
-                              </Tooltip>
-                              <span className={getRiskTextColor(ind.normalizedScore)}>
-                                {formatValue(ind)}{getUnit(ind.name)}
-                              </span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
+                {/* All Indicators Always Shown */}
+                <div className="space-y-1">
+                  {cat.indicators.map((ind, idx) => (
+                    <div key={idx} className="text-xs bg-gray-900 rounded p-1">
+                      <Tooltip text={getIndicatorDescription(ind.name)}>
+                        <div className="flex justify-between truncate hover:underline cursor-help mb-0.5">
+                          <span className="truncate flex-1">{ind.name}</span>
+                          <span className={getRiskTextColor(ind.normalizedScore)} style={{ minWidth: "40px", textAlign: "right" }}>
+                            {formatValue(ind)}{getUnit(ind.name)}
+                          </span>
+                        </div>
+                      </Tooltip>
+                      {ind.changePercent !== undefined && (
+                        <div className="text-gray-500 text-xs">
+                          前日比:
+                          <span className={ind.changePercent > 0 ? "text-red-400" : "text-green-400"}>
+                            {ind.changePercent > 0 ? "+" : ""}{ind.changePercent.toFixed(2)}%
+                          </span>
+                          {ind.previousValue !== undefined && (
+                            <span className="text-gray-600 ml-1">
+                              ({ind.previousValue.toFixed(2)})
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
+            ))}
 
             {/* Alerts */}
             {assessment.alerts.length > 0 && (
@@ -199,7 +200,7 @@ export default function RiskMonitorPage() {
               <div className="space-y-2 text-xs">
                 {assessment.topWarnings.map((indicator, idx) => (
                   <div key={idx} className="bg-gray-900 rounded p-2 border-l-2 border-red-500">
-                    <div className="flex justify-between items-start">
+                    <div className="flex justify-between items-start mb-1">
                       <div className="flex-1">
                         <Tooltip text={getIndicatorDescription(indicator.name)}>
                           <div className="font-semibold truncate hover:underline cursor-help">{indicator.name}</div>
@@ -212,6 +213,14 @@ export default function RiskMonitorPage() {
                         {indicator.normalizedScore.toFixed(0)}
                       </div>
                     </div>
+                    {indicator.changePercent !== undefined && (
+                      <div className="text-gray-400 text-xs pl-1">
+                        前日比:
+                        <span className={indicator.changePercent > 0 ? "text-red-400" : "text-green-400"}>
+                          {indicator.changePercent > 0 ? "+" : ""}{indicator.changePercent.toFixed(2)}%
+                        </span>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -262,6 +271,14 @@ export default function RiskMonitorPage() {
                       <div className={`font-bold ${getRiskTextColor(ind.normalizedScore)}`}>
                         {formatValue(ind)}{getUnit(ind.name)}
                       </div>
+                      {ind.changePercent !== undefined && (
+                        <div className="text-gray-500 text-xs">
+                          前日比:
+                          <span className={ind.changePercent > 0 ? "text-red-300" : "text-green-300"}>
+                            {ind.changePercent > 0 ? "+" : ""}{ind.changePercent.toFixed(2)}%
+                          </span>
+                        </div>
+                      )}
                     </div>
                   ))}
               </div>
