@@ -24,12 +24,15 @@ async function fetchFREDData(seriesId: string): Promise<FREDFetchResult> {
   }
 
   try {
-    const response = await fetch(
-      `${FRED_BASE_URL}?series_id=${seriesId}&api_key=${FRED_API_KEY}&limit=1&sort_order=desc`
-    );
+    const url = `${FRED_BASE_URL}?series_id=${seriesId}&api_key=${FRED_API_KEY}&limit=1&sort_order=desc`;
+    console.log(`[FRED API] Fetching ${seriesId} from FRED...`);
+
+    const response = await fetch(url);
 
     if (!response.ok) {
-      console.error(`FRED API error for ${seriesId}: ${response.status}`);
+      console.error(`[FRED API] Error for ${seriesId}: ${response.status} ${response.statusText}`);
+      const errorText = await response.text();
+      console.error(`[FRED API] Response: ${errorText}`);
       return { value: 0, success: false };
     }
 
@@ -38,13 +41,15 @@ async function fetchFREDData(seriesId: string): Promise<FREDFetchResult> {
     if (data.observations && data.observations.length > 0) {
       const latestValue = parseFloat(data.observations[0].value);
       if (!isNaN(latestValue)) {
+        console.log(`[FRED API] Success for ${seriesId}: ${latestValue}`);
         return { value: latestValue, success: true };
       }
     }
 
+    console.warn(`[FRED API] No observations for ${seriesId}`);
     return { value: 0, success: false };
   } catch (error) {
-    console.error(`Error fetching FRED data for ${seriesId}:`, error);
+    console.error(`[FRED API] Error fetching ${seriesId}:`, error);
     return { value: 0, success: false };
   }
 }
