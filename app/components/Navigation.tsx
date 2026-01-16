@@ -26,6 +26,12 @@ export default async function Navigation() {
                 スクリーニング
               </Link>
               <Link
+                href="/risk-monitor"
+                className="px-3 py-2 rounded-md text-sm font-medium transition-colors text-red-400 hover:bg-gray-700 hover:text-red-300"
+              >
+                🚨 リスク監視
+              </Link>
+              <Link
                 href="/watchlist"
                 className="px-3 py-2 rounded-md text-sm font-medium transition-colors text-gray-300 hover:bg-gray-700 hover:text-white"
               >
