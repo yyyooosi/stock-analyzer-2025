@@ -1,6 +1,6 @@
 // FRED API Integration - Fetch macroeconomic data from Federal Reserve
 
-const FRED_BASE_URL = "https://api.stlouisfed.org/fred/series/data";
+const FRED_BASE_URL = "https://api.stlouisfed.org/fred/series/observations";
 const FRED_API_KEY = process.env.FRED_API_KEY;
 
 interface FREDDataPoint {
@@ -24,8 +24,8 @@ async function fetchFREDData(seriesId: string): Promise<FREDFetchResult> {
   }
 
   try {
-    const url = `${FRED_BASE_URL}?series_id=${seriesId}&api_key=${FRED_API_KEY}&limit=1&sort_order=desc`;
-    console.log(`[FRED API] Fetching ${seriesId} from FRED...`);
+    const url = `${FRED_BASE_URL}?series_id=${seriesId}&api_key=${FRED_API_KEY}&file_type=json&sort_order=desc&limit=1`;
+    console.log(`[FRED API] Fetching ${seriesId} from URL: ${url.replace(FRED_API_KEY || '', '***')}`);
 
     const response = await fetch(url);
 
