@@ -1,4 +1,5 @@
 import { sql } from '@vercel/postgres';
+import { maskEmail } from './validation';
 
 export interface WatchlistDbItem {
   id: number;
@@ -41,13 +42,11 @@ export async function getUserWatchlist(userEmail: string): Promise<WatchlistDbIt
       WHERE user_email = ${userEmail}
       ORDER BY added_at DESC
     `;
-    console.log(`[Database] getUserWatchlist for ${userEmail}:`);
-    console.log(`[Database] rowCount = ${result.rowCount}`);
-    console.log(`[Database] rows.length = ${result.rows.length}`);
-    console.log('[Database] 取得したデータ:', JSON.stringify(result.rows, null, 2));
+    // Log with masked email for security
+    console.log(`[Database] getUserWatchlist for ${maskEmail(userEmail)}: ${result.rowCount} items`);
     return result.rows as WatchlistDbItem[];
   } catch (error) {
-    console.error('ウォッチリスト取得エラー:', error);
+    console.error('[Database] ウォッチリスト取得エラー');
     throw error;
   }
 }

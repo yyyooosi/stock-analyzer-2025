@@ -17,6 +17,12 @@ import {
   sendDiscordNotification,
   shouldSendNotification,
 } from "@/app/utils/notifications";
+import {
+  checkRateLimit,
+  getClientIdentifier,
+  RateLimitConfigs,
+  createRateLimitHeaders,
+} from "@/app/utils/rateLimit";
 
 let lastNotificationTime: Date | undefined = undefined;
 let previousAssessment: RiskAssessment | undefined = undefined;
@@ -28,6 +34,17 @@ function calculateChangePercent(currentValue: number, previousValue: number | un
 }
 
 export async function GET(request: NextRequest) {
+  // Rate limiting
+  const clientId = getClientIdentifier(request);
+  const rateLimitResult = checkRateLimit(clientId, RateLimitConfigs.riskMonitor);
+
+  if (!rateLimitResult.allowed) {
+    return NextResponse.json(
+      { error: "Rate limit exceeded. Please try again later." },
+      { status: 429, headers: createRateLimitHeaders(rateLimitResult) }
+    );
+  }
+
   try {
     // Fetch data from multiple sources in parallel
     const [macroData, valuationMetrics] = await Promise.all([

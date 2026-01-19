@@ -1,5 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchYahooQuote } from '@/app/utils/yahooFinance';
+import {
+  checkRateLimit,
+  getClientIdentifier,
+  RateLimitConfigs,
+  createRateLimitHeaders,
+} from '@/app/utils/rateLimit';
+import {
+  isValidStockSymbol,
+  sanitizeStockSymbol,
+} from '@/app/utils/validation';
 
 interface AlphaVantageGlobalQuote {
   'Global Quote': {
@@ -62,16 +72,40 @@ async function fetchFromYahooFinance(symbol: string): Promise<AlphaVantageGlobal
 }
 
 export async function GET(request: NextRequest) {
+  // Rate limiting
+  const clientId = getClientIdentifier(request);
+  const rateLimitResult = checkRateLimit(clientId, RateLimitConfigs.stockQuote);
+
+  if (!rateLimitResult.allowed) {
+    return NextResponse.json(
+      { error: 'Rate limit exceeded. Please try again later.' },
+      {
+        status: 429,
+        headers: createRateLimitHeaders(rateLimitResult),
+      }
+    );
+  }
+
   try {
     const searchParams = request.nextUrl.searchParams;
-    const symbol = searchParams.get('symbol');
+    const symbolParam = searchParams.get('symbol');
 
-    if (!symbol) {
+    if (!symbolParam) {
       return NextResponse.json(
         { error: 'Symbol parameter is required' },
-        { status: 400 }
+        { status: 400, headers: createRateLimitHeaders(rateLimitResult) }
       );
     }
+
+    // Validate and sanitize symbol
+    if (!isValidStockSymbol(symbolParam)) {
+      return NextResponse.json(
+        { error: 'Invalid stock symbol format' },
+        { status: 400, headers: createRateLimitHeaders(rateLimitResult) }
+      );
+    }
+
+    const symbol = sanitizeStockSymbol(symbolParam);
 
     const apiKey = process.env.ALPHA_VANTAGE_API_KEY;
     let data: AlphaVantageGlobalQuote;
@@ -93,7 +127,7 @@ export async function GET(request: NextRequest) {
           console.error(`[Quote] Yahoo Finance also failed for ${symbol}:`, yahooError);
           return NextResponse.json(
             { error: 'Stock symbol not found', symbol },
-            { status: 404 }
+            { status: 404, headers: createRateLimitHeaders(rateLimitResult) }
           );
         }
       }
@@ -107,18 +141,20 @@ export async function GET(request: NextRequest) {
         console.error(`[Quote] Yahoo Finance failed for ${symbol}:`, yahooError);
         return NextResponse.json(
           { error: 'Stock symbol not found', symbol },
-          { status: 404 }
+          { status: 404, headers: createRateLimitHeaders(rateLimitResult) }
         );
       }
     }
 
-    return NextResponse.json({ ...data, source });
+    return NextResponse.json(
+      { ...data, source },
+      { headers: createRateLimitHeaders(rateLimitResult) }
+    );
   } catch (error) {
     console.error('Stock quote API error:', error);
     return NextResponse.json(
       {
         error: 'Failed to fetch stock quote',
-        details: error instanceof Error ? error.message : 'Unknown error'
       },
       { status: 500 }
     );
