@@ -8,6 +8,12 @@ import {
 } from '@/app/utils/screener';
 import { fetchFMPComprehensiveStockData, FMPScreenerParams } from '@/app/utils/fmpApi';
 import { mapFMPDataArrayToStockFundamentals, filterStocksWithSufficientData } from '@/app/utils/fmpMapper';
+import {
+  checkRateLimit,
+  getClientIdentifier,
+  RateLimitConfigs,
+  createRateLimitHeaders,
+} from '@/app/utils/rateLimit';
 
 /**
  * FMP APIから全米国株のデータを取得
@@ -68,6 +74,17 @@ async function fetchStocksFromFMP(filters: ScreenerFilters): Promise<StockFundam
 }
 
 export async function GET(request: NextRequest) {
+  // Rate limiting (screener is expensive, use lower limit)
+  const clientId = getClientIdentifier(request);
+  const rateLimitResult = checkRateLimit(clientId, RateLimitConfigs.screener);
+
+  if (!rateLimitResult.allowed) {
+    return NextResponse.json(
+      { error: 'Rate limit exceeded. Please try again later.' },
+      { status: 429, headers: createRateLimitHeaders(rateLimitResult) }
+    );
+  }
+
   try {
     const { searchParams } = new URL(request.url);
 
