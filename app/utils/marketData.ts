@@ -1,6 +1,9 @@
 // Market Data Integration - Fetch market data and valuation metrics
 
-import yahooFinance from "yahoo-finance2";
+import YahooFinance from "yahoo-finance2";
+
+// Create Yahoo Finance instance (required for v3)
+const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
 
 // Yahoo Finance Quote の型定義
 interface YahooQuote {
