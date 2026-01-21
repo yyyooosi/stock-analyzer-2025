@@ -1,7 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { RiskAssessment, RiskIndicator, CategoryRiskScore, getIndicatorDescription } from "@/app/utils/riskMonitor";
+import { useEffect, useState, useCallback, useRef } from "react";
+import { RiskAssessment, RiskIndicator, getIndicatorDescription } from "@/app/utils/riskMonitor";
+
+// 接続状態の型定義
+type ConnectionStatus = "connecting" | "connected" | "disconnected" | "error";
 
 // ツールチップコンポーネント
 function Tooltip({ text, children }: { text: string; children: React.ReactNode }) {
@@ -22,10 +25,40 @@ function Tooltip({ text, children }: { text: string; children: React.ReactNode }
   );
 }
 
+// 接続状態インジケーターコンポーネント
+function ConnectionIndicator({ status, updateInterval }: { status: ConnectionStatus; updateInterval: number | null }) {
+  const statusConfig = {
+    connecting: { color: "bg-yellow-500", text: "接続中...", pulse: true },
+    connected: { color: "bg-green-500", text: "リアルタイム接続", pulse: false },
+    disconnected: { color: "bg-gray-500", text: "切断", pulse: false },
+    error: { color: "bg-red-500", text: "接続エラー", pulse: true },
+  };
+
+  const config = statusConfig[status];
+
+  return (
+    <div className="flex items-center gap-2 text-xs">
+      <div className="flex items-center gap-1">
+        <div className={`w-2 h-2 rounded-full ${config.color} ${config.pulse ? "animate-pulse" : ""}`}></div>
+        <span className="text-gray-400">{config.text}</span>
+      </div>
+      {status === "connected" && updateInterval && (
+        <span className="text-gray-500">({updateInterval / 1000}秒間隔)</span>
+      )}
+    </div>
+  );
+}
+
 export default function RiskMonitorPage() {
   const [assessment, setAssessment] = useState<RiskAssessment | null>(null);
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("connecting");
+  const [updateInterval, setUpdateInterval] = useState<number | null>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectAttempts = useRef(0);
+  const maxReconnectAttempts = 5;
 
   const getRiskColor = (score: number): string => {
     if (score < 30) return "bg-green-900 border-green-600";
@@ -54,13 +87,6 @@ export default function RiskMonitorPage() {
     return value.toFixed(2);
   };
 
-  const getEstimatedLabel = (indicator: RiskIndicator): string => {
-    if (indicator.isEstimated) {
-      return " [推定値]";
-    }
-    return "";
-  };
-
   const getUnit = (name: string): string => {
     if (name.includes("Rate") || name.includes("Spread") || name.includes("Yield")) return "%";
     if (name.includes("Concentration")) return "%";
@@ -69,36 +95,122 @@ export default function RiskMonitorPage() {
     return "";
   };
 
-  const fetchRiskAssessment = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch("/api/risk-monitor");
-      const result = await response.json();
-
-      if (result.success) {
-        setAssessment(result.data);
-        setLastUpdate(new Date());
-      }
-    } catch (error) {
-      console.error("Error fetching risk assessment:", error);
-    } finally {
-      setLoading(false);
+  // SSE接続を確立する関数
+  const connectSSE = useCallback(() => {
+    // 既存の接続をクローズ
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
     }
-  };
 
-  useEffect(() => {
-    fetchRiskAssessment();
-    const interval = setInterval(fetchRiskAssessment, 5 * 60 * 1000); // Refresh every 5 minutes
+    setConnectionStatus("connecting");
+    const eventSource = new EventSource("/api/risk-monitor/stream");
+    eventSourceRef.current = eventSource;
 
+    // 接続確立イベント
+    eventSource.addEventListener("connected", (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log("[SSE] Connected:", data.message);
+        setConnectionStatus("connected");
+        setUpdateInterval(data.updateInterval);
+        reconnectAttempts.current = 0;
+      } catch (error) {
+        console.error("[SSE] Failed to parse connected event:", error);
+      }
+    });
+
+    // リスク評価データ受信
+    eventSource.addEventListener("assessment", (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.success && data.data) {
+          setAssessment(data.data);
+          setLastUpdate(new Date());
+          setLoading(false);
+        }
+      } catch (error) {
+        console.error("[SSE] Failed to parse assessment event:", error);
+      }
+    });
+
+    // エラーイベント
+    eventSource.addEventListener("error", (event) => {
+      console.error("[SSE] Error event received:", event);
+    });
+
+    // 接続エラー
+    eventSource.onerror = () => {
+      console.error("[SSE] Connection error");
+      setConnectionStatus("error");
+      eventSource.close();
+
+      // 再接続ロジック（指数バックオフ）
+      if (reconnectAttempts.current < maxReconnectAttempts) {
+        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000);
+        console.log(`[SSE] Reconnecting in ${delay}ms (attempt ${reconnectAttempts.current + 1}/${maxReconnectAttempts})`);
+        reconnectTimeoutRef.current = setTimeout(() => {
+          reconnectAttempts.current++;
+          connectSSE();
+        }, delay);
+      } else {
+        console.error("[SSE] Max reconnect attempts reached, falling back to polling");
+        setConnectionStatus("disconnected");
+        // フォールバック: 従来のポーリングに切り替え
+        fallbackToPolling();
+      }
+    };
+  }, []);
+
+  // フォールバック: 従来のポーリング
+  const fallbackToPolling = useCallback(async () => {
+    const fetchData = async () => {
+      try {
+        const response = await fetch("/api/risk-monitor");
+        const result = await response.json();
+        if (result.success) {
+          setAssessment(result.data);
+          setLastUpdate(new Date());
+          setLoading(false);
+        }
+      } catch (error) {
+        console.error("Error fetching risk assessment:", error);
+      }
+    };
+
+    // 即座にデータを取得
+    await fetchData();
+    // 5分間隔でポーリング
+    const interval = setInterval(fetchData, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
+
+  // SSE接続の初期化とクリーンアップ
+  useEffect(() => {
+    connectSSE();
+
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+    };
+  }, [connectSSE]);
+
+  // 手動再接続ボタンのハンドラ
+  const handleReconnect = () => {
+    reconnectAttempts.current = 0;
+    connectSSE();
+  };
 
   if (loading || !assessment) {
     return (
       <div className="min-h-screen bg-gray-900 text-white p-4 flex items-center justify-center">
         <div className="text-center">
-          <h1 className="text-3xl font-bold mb-4">🚨 リスク監視</h1>
+          <h1 className="text-3xl font-bold mb-4">リスク監視</h1>
           <p>データを読み込み中...</p>
+          <ConnectionIndicator status={connectionStatus} updateInterval={updateInterval} />
         </div>
       </div>
     );
@@ -110,10 +222,21 @@ export default function RiskMonitorPage() {
       <div className="bg-gray-800 border-b border-gray-700 p-3 flex-shrink-0">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold">🚨 リスク監視ダッシュボード</h1>
-            <p className="text-xs text-gray-400">
-              最終更新: {lastUpdate?.toLocaleTimeString("ja-JP")}
-            </p>
+            <h1 className="text-2xl font-bold">リスク監視ダッシュボード</h1>
+            <div className="flex items-center gap-4 mt-1">
+              <p className="text-xs text-gray-400">
+                最終更新: {lastUpdate?.toLocaleTimeString("ja-JP")}
+              </p>
+              <ConnectionIndicator status={connectionStatus} updateInterval={updateInterval} />
+              {connectionStatus === "disconnected" && (
+                <button
+                  onClick={handleReconnect}
+                  className="text-xs bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded"
+                >
+                  再接続
+                </button>
+              )}
+            </div>
           </div>
           <div className={`text-right ${getRiskColor(assessment.overallScore)} border rounded px-4 py-2`}>
             <div className={`text-3xl font-bold ${getRiskTextColor(assessment.overallScore)}`}>
@@ -187,7 +310,7 @@ export default function RiskMonitorPage() {
             {/* Alerts */}
             {assessment.alerts.length > 0 && (
               <div className="bg-red-900 border border-red-600 rounded p-3">
-                <h3 className="text-sm font-bold mb-2">⚠️ アラート</h3>
+                <h3 className="text-sm font-bold mb-2">アラート</h3>
                 <ul className="space-y-1">
                   {assessment.alerts.map((alert, idx) => (
                     <li key={idx} className="text-xs text-red-200">
@@ -203,7 +326,7 @@ export default function RiskMonitorPage() {
           <div className="col-span-4 flex flex-col gap-3">
             {/* Top 5 Risk Indicators */}
             <div className="bg-gray-800 border border-gray-700 rounded p-3">
-              <h3 className="text-sm font-bold mb-2">🔴 リスク指標 TOP 5</h3>
+              <h3 className="text-sm font-bold mb-2">リスク指標 TOP 5</h3>
               <div className="space-y-2 text-xs">
                 {assessment.topWarnings.map((indicator, idx) => (
                   <div key={idx} className="bg-gray-900 rounded p-2 border-l-2 border-red-500">
@@ -238,7 +361,7 @@ export default function RiskMonitorPage() {
           <div className="col-span-5 flex flex-col gap-3">
             {/* Historical Crash Comparison */}
             <div className="bg-gray-800 border border-gray-700 rounded p-3 flex-1">
-              <h3 className="text-sm font-bold mb-3">📈 過去クラッシュとの類似度</h3>
+              <h3 className="text-sm font-bold mb-3">過去クラッシュとの類似度</h3>
               <div className="grid grid-cols-1 gap-3 h-full">
                 {[
                   { label: "ドットコム 2000", value: assessment.historicalComparison.dotCom2000, color: "bg-blue-500" },
@@ -265,7 +388,7 @@ export default function RiskMonitorPage() {
 
             {/* Key Macro Data */}
             <div className="bg-gray-800 border border-gray-700 rounded p-3">
-              <h3 className="text-sm font-bold mb-2">📊 マクロ指標</h3>
+              <h3 className="text-sm font-bold mb-2">マクロ指標</h3>
               <div className="grid grid-cols-2 gap-2 text-xs">
                 {assessment.categories
                   .find((c) => c.category === "macroeconomic")
