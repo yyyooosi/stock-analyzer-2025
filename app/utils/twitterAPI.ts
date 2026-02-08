@@ -302,6 +302,145 @@ export async function searchTickerMentions(
   }
 }
 
+// =============================================================
+// サーバーサイドからX APIを直接呼び出す関数（バッチ処理用）
+// クライアント用の searchTickerMentions は /api/twitter/search を経由するが、
+// バッチ処理はサーバー内で完結させるため直接呼び出す
+// =============================================================
+
+const TWITTER_API_BASE = 'https://api.twitter.com/2';
+
+export interface SentimentAggregation {
+  tweetCount: number;
+  positiveCount: number;
+  neutralCount: number;
+  negativeCount: number;
+  negativeKeywordCount: number;
+  sentimentScore: number; // -100 ~ +100
+  sampleTweets: { text: string; sentiment: string; createdAt: string }[];
+}
+
+/**
+ * サーバーサイドから直接 X API を呼び出してツイートを検索
+ */
+export async function searchTickerMentionsDirect(
+  symbol: string,
+  maxResults: number = 100
+): Promise<Tweet[]> {
+  const bearerToken = process.env.TWITTER_BEARER_TOKEN;
+  if (!bearerToken) {
+    throw new TwitterAPIError('TWITTER_BEARER_TOKEN が設定されていません');
+  }
+
+  const query = `${symbol} -is:retweet (lang:ja OR lang:en)`;
+
+  const twitterUrl = new URL(`${TWITTER_API_BASE}/tweets/search/recent`);
+  twitterUrl.searchParams.set('query', query);
+  twitterUrl.searchParams.set('max_results', Math.min(maxResults, 100).toString());
+  twitterUrl.searchParams.set('tweet.fields', 'created_at,public_metrics,author_id');
+  twitterUrl.searchParams.set('user.fields', 'username');
+  twitterUrl.searchParams.set('expansions', 'author_id');
+
+  const response = await fetch(twitterUrl.toString(), {
+    headers: {
+      'Authorization': `Bearer ${bearerToken}`,
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new TwitterAPIError(
+      `X API Error: ${response.status} - ${JSON.stringify(errorData)}`,
+      response.status
+    );
+  }
+
+  const data = await response.json();
+  const tweets: Tweet[] = [];
+
+  if (data.data && Array.isArray(data.data)) {
+    const usersMap: { [id: string]: { username: string } } = {};
+    if (data.includes?.users) {
+      data.includes.users.forEach((user: any) => {
+        usersMap[user.id] = { username: user.username };
+      });
+    }
+
+    data.data.forEach((tweet: any) => {
+      const tweetText = tweet.text;
+      tweets.push({
+        id: tweet.id,
+        text: tweetText,
+        authorId: tweet.author_id,
+        authorUsername: usersMap[tweet.author_id]?.username || 'unknown',
+        createdAt: tweet.created_at,
+        publicMetrics: {
+          retweetCount: tweet.public_metrics?.retweet_count || 0,
+          replyCount: tweet.public_metrics?.reply_count || 0,
+          likeCount: tweet.public_metrics?.like_count || 0,
+          quoteCount: tweet.public_metrics?.quote_count || 0,
+        },
+        sentiment: analyzeSentiment(tweetText),
+        hasNegativeKeywords: hasNegativeKeywords(tweetText),
+      });
+    });
+  }
+
+  return tweets;
+}
+
+/**
+ * ツイート配列からセンチメントを集計する
+ */
+export function aggregateSentiment(tweets: Tweet[]): SentimentAggregation {
+  let positiveCount = 0;
+  let neutralCount = 0;
+  let negativeCount = 0;
+  let negativeKeywordCount = 0;
+
+  for (const tweet of tweets) {
+    const sentiment = tweet.sentiment || analyzeSentiment(tweet.text);
+    if (sentiment === 'positive') positiveCount++;
+    else if (sentiment === 'negative') negativeCount++;
+    else neutralCount++;
+
+    if (tweet.hasNegativeKeywords ?? hasNegativeKeywords(tweet.text)) {
+      negativeKeywordCount++;
+    }
+  }
+
+  const tweetCount = tweets.length;
+  // スコア計算: -100(全てネガティブ) ~ +100(全てポジティブ)
+  const sentimentScore = tweetCount > 0
+    ? Math.round(((positiveCount - negativeCount) / tweetCount) * 100)
+    : 0;
+
+  // エンゲージメントが高い順に上位5件を保存
+  const sampleTweets = [...tweets]
+    .sort((a, b) => {
+      const engA = a.publicMetrics.likeCount + a.publicMetrics.retweetCount;
+      const engB = b.publicMetrics.likeCount + b.publicMetrics.retweetCount;
+      return engB - engA;
+    })
+    .slice(0, 5)
+    .map(t => ({
+      text: t.text,
+      sentiment: t.sentiment || analyzeSentiment(t.text),
+      createdAt: t.createdAt,
+    }));
+
+  return {
+    tweetCount,
+    positiveCount,
+    neutralCount,
+    negativeCount,
+    negativeKeywordCount,
+    sentimentScore,
+    sampleTweets,
+  };
+}
+
 /**
  * デモモード用のサンプルツイートを生成
  */
