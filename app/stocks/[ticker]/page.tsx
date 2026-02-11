@@ -17,7 +17,7 @@ interface SentimentData {
   negative_count: number;
   negative_keyword_count: number;
   sentiment_score: number;
-  sample_tweets: { text: string; sentiment: string; createdAt: string }[] | null;
+  sample_tweets: { id: string; text: string; authorUsername: string; sentiment: string; createdAt: string }[] | null;
   fetched_at: string;
 }
 
@@ -393,7 +393,7 @@ export default function StockDetailPage({
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold">X (Twitter) センチメント</h2>
               <span className="text-xs text-gray-500">
-                {new Date(sentiment.fetched_at).toLocaleString('ja-JP')}
+                分析日時: {new Date(sentiment.fetched_at).toLocaleString('ja-JP')}
               </span>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
@@ -439,10 +439,16 @@ export default function StockDetailPage({
             </div>
             {sentiment.sample_tweets && sentiment.sample_tweets.length > 0 && (
               <div>
-                <h3 className="text-sm text-gray-400 mb-2">注目ツイート</h3>
+                <h3 className="text-sm text-gray-400 mb-2">注目ツイート（エンゲージメント順）</h3>
                 <div className="space-y-2">
-                  {sentiment.sample_tweets.map((tweet: { text: string; sentiment: string; createdAt: string }, i: number) => (
-                    <div key={i} className="bg-gray-700 rounded p-3 text-sm">
+                  {sentiment.sample_tweets.map((tweet: { id: string; text: string; authorUsername: string; sentiment: string; createdAt: string }, i: number) => (
+                    <a
+                      key={i}
+                      href={tweet.id ? `https://x.com/i/web/status/${tweet.id}` : `https://x.com/${tweet.authorUsername}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block bg-gray-700 rounded p-3 text-sm hover:bg-gray-600 border border-transparent hover:border-gray-500 transition-colors"
+                    >
                       <div className="flex items-center gap-2 mb-1">
                         <span
                           className={`px-1.5 py-0.5 rounded text-xs ${
@@ -459,9 +465,17 @@ export default function StockDetailPage({
                               ? 'Negative'
                               : 'Neutral'}
                         </span>
+                        {tweet.authorUsername && (
+                          <span className="text-blue-400 font-medium">@{tweet.authorUsername}</span>
+                        )}
+                        {tweet.createdAt && (
+                          <span className="text-gray-500 text-xs ml-auto">
+                            {new Date(tweet.createdAt).toLocaleString('ja-JP')}
+                          </span>
+                        )}
                       </div>
                       <p className="text-gray-300 line-clamp-2">{tweet.text}</p>
-                    </div>
+                    </a>
                   ))}
                 </div>
               </div>

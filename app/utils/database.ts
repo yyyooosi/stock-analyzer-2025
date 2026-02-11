@@ -123,7 +123,7 @@ export interface TwitterSentimentRow {
   neutral_count: number;
   negative_count: number;
   negative_keyword_count: number;
-  sample_tweets: object | null;
+  sample_tweets: { id: string; text: string; authorUsername: string; sentiment: string; createdAt: string }[] | null;
   sentiment_score: number;
   fetched_at: string;
 }

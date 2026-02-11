@@ -317,7 +317,7 @@ export interface SentimentAggregation {
   negativeCount: number;
   negativeKeywordCount: number;
   sentimentScore: number; // -100 ~ +100
-  sampleTweets: { text: string; sentiment: string; createdAt: string }[];
+  sampleTweets: { id: string; text: string; authorUsername: string; sentiment: string; createdAt: string }[];
 }
 
 /**
@@ -425,7 +425,9 @@ export function aggregateSentiment(tweets: Tweet[]): SentimentAggregation {
     })
     .slice(0, 5)
     .map(t => ({
+      id: t.id,
       text: t.text,
+      authorUsername: t.authorUsername,
       sentiment: t.sentiment || analyzeSentiment(t.text),
       createdAt: t.createdAt,
     }));
