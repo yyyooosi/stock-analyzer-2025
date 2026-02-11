@@ -49,7 +49,6 @@ export async function POST(request: NextRequest) {
 
     // X API でツイートを取得 → センチメント分析
     let tweets;
-    let usedDemo = false;
     try {
       tweets = await searchTickerMentionsDirect(symbol, 100);
     } catch (apiError) {
@@ -57,11 +56,7 @@ export async function POST(request: NextRequest) {
         `[Batch] X API エラー (${symbol}), デモデータのため保存をスキップ:`,
         apiError instanceof Error ? apiError.message : apiError
       );
-      usedDemo = true;
-    }
-
-    // デモデータの場合は保存しない
-    if (usedDemo) {
+      // デモデータの場合は保存しない
       return NextResponse.json({
         success: true,
         processed: {
