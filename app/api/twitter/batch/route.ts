@@ -7,7 +7,6 @@ import {
 import {
   searchTickerMentionsDirect,
   aggregateSentiment,
-  generateSampleTweets,
 } from '@/app/utils/twitterAPI';
 
 /**
@@ -50,18 +49,22 @@ export async function POST(request: NextRequest) {
 
     // X API でツイートを取得 → センチメント分析
     let tweets;
-    let usedDemo = false;
     try {
       tweets = await searchTickerMentionsDirect(symbol, 100);
     } catch (apiError) {
       console.warn(
-        `[Batch] X API エラー (${symbol}), デモデータで保存:`,
+        `[Batch] X API エラー (${symbol}), デモデータのため保存をスキップ:`,
         apiError instanceof Error ? apiError.message : apiError
       );
-      // API エラー時はデモデータで記録（処理済みとしてマークするため）
-      const demoResult = generateSampleTweets(symbol);
-      tweets = demoResult.tweets;
-      usedDemo = true;
+      // デモデータの場合は保存しない
+      return NextResponse.json({
+        success: true,
+        processed: {
+          symbol,
+          skipped: true,
+          reason: 'デモデータのため保存しませんでした',
+        },
+      });
     }
 
     const aggregation = aggregateSentiment(tweets);
@@ -91,7 +94,7 @@ export async function POST(request: NextRequest) {
         positiveCount: aggregation.positiveCount,
         neutralCount: aggregation.neutralCount,
         negativeCount: aggregation.negativeCount,
-        usedDemoData: usedDemo,
+        usedDemoData: false,
       },
     });
   } catch (error) {
