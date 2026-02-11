@@ -9,18 +9,6 @@ import {
   formatNumber,
 } from '@/app/utils/screener';
 
-interface SentimentData {
-  symbol: string;
-  tweet_count: number;
-  positive_count: number;
-  neutral_count: number;
-  negative_count: number;
-  negative_keyword_count: number;
-  sentiment_score: number;
-  sample_tweets: { text: string; sentiment: string; createdAt: string }[] | null;
-  fetched_at: string;
-}
-
 interface StockDetailData {
   stock: ScreenerResult;
   competitors: ScreenerResult[];
@@ -94,30 +82,19 @@ export default function StockDetailPage({
 }) {
   const { ticker } = use(params);
   const [data, setData] = useState<StockDetailData | null>(null);
-  const [sentiment, setSentiment] = useState<SentimentData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [stockResponse, sentimentResponse] = await Promise.all([
-          fetch(`/api/screener/${ticker}`),
-          fetch(`/api/twitter/sentiment?symbol=${ticker}`).catch(() => null),
-        ]);
+        const response = await fetch(`/api/screener/${ticker}`);
+        const result = await response.json();
 
-        const result = await stockResponse.json();
         if (result.success) {
           setData(result);
         } else {
           setError(result.error || '銘柄情報を取得できませんでした');
-        }
-
-        if (sentimentResponse?.ok) {
-          const sentimentResult = await sentimentResponse.json();
-          if (sentimentResult.data) {
-            setSentiment(sentimentResult.data);
-          }
         }
       } catch (err) {
         setError('データの取得中にエラーが発生しました');
@@ -386,88 +363,6 @@ export default function StockDetailPage({
             </div>
           </div>
         </div>
-
-        {/* Sentiment */}
-        {sentiment && (
-          <div className="mt-8 bg-gray-800 rounded-lg p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold">X (Twitter) センチメント</h2>
-              <span className="text-xs text-gray-500">
-                {new Date(sentiment.fetched_at).toLocaleString('ja-JP')}
-              </span>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-              <div className="bg-gray-700 rounded-lg p-4">
-                <div className="text-gray-400 text-sm mb-1">スコア</div>
-                <div
-                  className={`text-3xl font-bold ${
-                    sentiment.sentiment_score > 20
-                      ? 'text-green-400'
-                      : sentiment.sentiment_score < -20
-                        ? 'text-red-400'
-                        : 'text-yellow-400'
-                  }`}
-                >
-                  {sentiment.sentiment_score > 0 ? '+' : ''}
-                  {sentiment.sentiment_score}
-                </div>
-              </div>
-              <div className="bg-gray-700 rounded-lg p-4">
-                <div className="text-gray-400 text-sm mb-1">ツイート数</div>
-                <div className="text-2xl font-bold">{sentiment.tweet_count}</div>
-              </div>
-              <div className="bg-gray-700 rounded-lg p-4">
-                <div className="text-gray-400 text-sm mb-1">ポジ / ニュートラル / ネガ</div>
-                <div className="flex items-center gap-2 text-lg font-bold">
-                  <span className="text-green-400">{sentiment.positive_count}</span>
-                  <span className="text-gray-500">/</span>
-                  <span className="text-yellow-400">{sentiment.neutral_count}</span>
-                  <span className="text-gray-500">/</span>
-                  <span className="text-red-400">{sentiment.negative_count}</span>
-                </div>
-              </div>
-              <div className="bg-gray-700 rounded-lg p-4">
-                <div className="text-gray-400 text-sm mb-1">ネガティブKW検出</div>
-                <div
-                  className={`text-2xl font-bold ${
-                    sentiment.negative_keyword_count > 0 ? 'text-red-400' : 'text-gray-400'
-                  }`}
-                >
-                  {sentiment.negative_keyword_count}件
-                </div>
-              </div>
-            </div>
-            {sentiment.sample_tweets && sentiment.sample_tweets.length > 0 && (
-              <div>
-                <h3 className="text-sm text-gray-400 mb-2">注目ツイート</h3>
-                <div className="space-y-2">
-                  {sentiment.sample_tweets.map((tweet: { text: string; sentiment: string; createdAt: string }, i: number) => (
-                    <div key={i} className="bg-gray-700 rounded p-3 text-sm">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span
-                          className={`px-1.5 py-0.5 rounded text-xs ${
-                            tweet.sentiment === 'positive'
-                              ? 'bg-green-900 text-green-300'
-                              : tweet.sentiment === 'negative'
-                                ? 'bg-red-900 text-red-300'
-                                : 'bg-gray-600 text-gray-300'
-                          }`}
-                        >
-                          {tweet.sentiment === 'positive'
-                            ? 'Positive'
-                            : tweet.sentiment === 'negative'
-                              ? 'Negative'
-                              : 'Neutral'}
-                        </span>
-                      </div>
-                      <p className="text-gray-300 line-clamp-2">{tweet.text}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
 
         {/* Competitors */}
         {competitors.length > 0 && (
