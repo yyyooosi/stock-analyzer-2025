@@ -2,8 +2,8 @@ name: Twitter Sentiment Batch (Apify)
 
 on:
   schedule:
-    # 15分ごとに実行
-    - cron: '*/15 * * * *'
+    # 8時間ごとに実行（Apify 無料枠 $5/月 に収めるため）
+    - cron: '0 */8 * * *'
   workflow_dispatch: # 手動実行も可能
 
 jobs:
