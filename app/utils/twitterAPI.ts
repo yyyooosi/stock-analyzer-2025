@@ -220,15 +220,10 @@ export async function searchTickerMentions(
   maxResults: number = 100
 ): Promise<TwitterSearchResult> {
   try {
-    // 検索クエリの構築（ティッカーシンボルのみ）
-    let query = `${symbol}`;
-
-    // リツイートを除外し、日本語または英語のツイートのみ
-    query += ' -is:retweet (lang:ja OR lang:en)';
-
-    // Next.js API Routeを経由してリクエスト
+    // StockTwits を使用（symbol パラメータ経由）
+    // フォールバック: TWITTER_BEARER_TOKEN があれば X API を使用
     const params = new URLSearchParams({
-      query: query,
+      symbol: symbol.trim().toUpperCase(),
       max_results: Math.min(maxResults, 100).toString(),
     });
 
