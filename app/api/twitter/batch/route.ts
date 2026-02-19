@@ -13,7 +13,7 @@ import {
 /**
  * POST /api/twitter/batch
  *
- * GitHub Actions (*/15 * * * *) から15分ごとに呼び出される。
+ * GitHub Actions (0 *\/8 * * *) から8時間ごとに呼び出される。
  * 1回の実行で1銘柄だけ処理する。
  *
  * データソース: Apify Tweet Scraper (APIFY_API_TOKEN が必要)
