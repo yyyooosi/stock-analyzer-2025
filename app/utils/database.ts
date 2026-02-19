@@ -237,14 +237,14 @@ export async function getLatestSentiment(symbol: string): Promise<TwitterSentime
 export async function getLatestSentiments(symbols: string[]): Promise<TwitterSentimentRow[]> {
   try {
     if (symbols.length === 0) return [];
-    const upperSymbols = symbols.map((s) => s.toUpperCase());
+    const upperSymbols = symbols.map((s) => s.toUpperCase()).join(',');
     const result = await sql`
       SELECT DISTINCT ON (symbol)
         id, symbol, tweet_count, positive_count, neutral_count,
         negative_count, negative_keyword_count, sample_tweets,
         sentiment_score, fetched_at
       FROM twitter_sentiment
-      WHERE symbol = ANY(${upperSymbols}::text[])
+      WHERE symbol = ANY(string_to_array(${upperSymbols}, ','))
       ORDER BY symbol, fetched_at DESC
     `;
     return result.rows as TwitterSentimentRow[];
