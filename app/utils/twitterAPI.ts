@@ -297,6 +297,88 @@ export async function searchTickerMentions(
   }
 }
 
+// =============================================================
+// バッチ処理用: サーバーサイドから StockTwits 経由でツイートを直接取得
+// =============================================================
+
+export interface SentimentAggregation {
+  tweetCount: number;
+  positiveCount: number;
+  neutralCount: number;
+  negativeCount: number;
+  negativeKeywordCount: number;
+  sentimentScore: number; // -100 ~ +100
+  sampleTweets: { text: string; sentiment: string; createdAt: string }[];
+}
+
+/**
+ * StockTwits 経由でティッカーメンション検索（バッチ処理用サーバーサイド関数）
+ * クライアント用の searchTickerMentions は /api/twitter/search を経由するが、
+ * バッチ処理はサーバー内で完結させるためここから直接 StockTwits を呼ぶ。
+ * 認証不要・完全無料（APIキー不要）。
+ */
+export async function searchTickerMentionsDirect(
+  symbol: string,
+  maxResults: number = 20
+): Promise<Tweet[]> {
+  const { getStockTwitsStream } = await import('./stockTwitsAPI');
+
+  const result = await getStockTwitsStream(symbol.trim().toUpperCase());
+  return result.tweets.slice(0, Math.min(maxResults, 30));
+}
+
+/**
+ * ツイート配列からセンチメントを集計する
+ */
+export function aggregateSentiment(tweets: Tweet[]): SentimentAggregation {
+  let positiveCount = 0;
+  let neutralCount = 0;
+  let negativeCount = 0;
+  let negativeKeywordCount = 0;
+
+  for (const tweet of tweets) {
+    const sentiment = tweet.sentiment || analyzeSentiment(tweet.text);
+    if (sentiment === 'positive') positiveCount++;
+    else if (sentiment === 'negative') negativeCount++;
+    else neutralCount++;
+
+    if (tweet.hasNegativeKeywords ?? hasNegativeKeywords(tweet.text)) {
+      negativeKeywordCount++;
+    }
+  }
+
+  const tweetCount = tweets.length;
+  // スコア計算: -100(全てネガティブ) ~ +100(全てポジティブ)
+  const sentimentScore =
+    tweetCount > 0
+      ? Math.round(((positiveCount - negativeCount) / tweetCount) * 100)
+      : 0;
+
+  // エンゲージメントが高い順に上位5件を保存
+  const sampleTweets = [...tweets]
+    .sort((a, b) => {
+      const engA = a.publicMetrics.likeCount + a.publicMetrics.retweetCount;
+      const engB = b.publicMetrics.likeCount + b.publicMetrics.retweetCount;
+      return engB - engA;
+    })
+    .slice(0, 5)
+    .map((t) => ({
+      text: t.text,
+      sentiment: t.sentiment || analyzeSentiment(t.text),
+      createdAt: t.createdAt,
+    }));
+
+  return {
+    tweetCount,
+    positiveCount,
+    neutralCount,
+    negativeCount,
+    negativeKeywordCount,
+    sentimentScore,
+    sampleTweets,
+  };
+}
+
 /**
  * デモモード用のサンプルツイートを生成
  */

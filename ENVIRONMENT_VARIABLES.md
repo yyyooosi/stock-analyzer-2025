@@ -2,8 +2,10 @@
 
 ## 概要
 
-このアプリケーションは、TwitterとAlpha Vantageの2つの外部APIを使用します。
-セキュリティ向上のため、**すべてのAPIキーはバックエンドで管理**され、フロントエンドには露出しません。
+このアプリケーションは、Alpha Vantage などの外部 API を使用します。
+セキュリティ向上のため、**すべての API キーはバックエンドで管理**され、フロントエンドには露出しません。
+
+なお、ソーシャルセンチメントデータは **StockTwits API** から取得します（認証不要・APIキー不要）。
 
 ## 必要な環境変数
 
@@ -17,15 +19,22 @@ ALPHA_VANTAGE_API_KEY=your_alpha_vantage_api_key_here
 - **用途**: 株価データと履歴チャートの取得
 - **注意**: `NEXT_PUBLIC_` プレフィックスは**付けない**こと
 
-### 2. Twitter Bearer Token（ツイートデータ）
+### 2. CRON_SECRET（バッチ処理認証）
 
 ```bash
-TWITTER_BEARER_TOKEN=your_twitter_bearer_token_here
+CRON_SECRET=your_cron_secret_here
 ```
 
-- **取得先**: https://developer.twitter.com/en/portal/dashboard
-- **用途**: 暴落関連ツイートの検索と取得
-- **注意**: `NEXT_PUBLIC_` プレフィックスは**付けない**こと
+- **用途**: GitHub Actions から `/api/twitter/batch` を呼び出す際の認証
+- **設定**: 任意の安全な文字列を設定し、GitHub Secrets にも同じ値を登録
+
+### 3. StockTwits API（ソーシャルセンチメント）
+
+**APIキー不要・設定不要**。`stockTwitsEnabled: true` が常に返されます。
+
+- **エンドポイント**: `https://api.stocktwits.com/api/2/streams/symbol/{SYMBOL}.json`
+- **用途**: ティッカー別の最新30件の投稿取得・センチメント分析
+- **制限**: ~60 リクエスト/分
 
 ## セットアップ手順
 
@@ -34,17 +43,17 @@ TWITTER_BEARER_TOKEN=your_twitter_bearer_token_here
 1. プロジェクトルートに `.env.local` ファイルを作成:
 
 ```bash
-cp .env.local.example .env.local
+cp .env.example .env.local
 ```
 
-2. `.env.local` を編集して、実際のAPIキーを設定:
+2. `.env.local` を編集して、実際の API キーを設定:
 
 ```bash
 # Alpha Vantage API Key (サーバーサイド専用)
 ALPHA_VANTAGE_API_KEY=your_actual_alpha_vantage_key
 
-# Twitter API Bearer Token (サーバーサイド専用)
-TWITTER_BEARER_TOKEN=your_actual_twitter_bearer_token
+# バッチ処理認証シークレット
+CRON_SECRET=your_secret_string
 ```
 
 3. 開発サーバーを起動:
@@ -53,107 +62,99 @@ TWITTER_BEARER_TOKEN=your_actual_twitter_bearer_token
 npm run dev
 ```
 
-### Vercel本番環境
+### Vercel 本番環境
 
-1. Vercelプロジェクトの設定ページにアクセス:
+1. Vercel プロジェクトの設定ページにアクセス:
    - https://vercel.com/your-username/your-project/settings/environment-variables
 
 2. 以下の環境変数を追加:
-   - `ALPHA_VANTAGE_API_KEY`: Alpha Vantageから取得したAPIキー
-   - `TWITTER_BEARER_TOKEN`: Twitter Developer Portalから取得したBearer Token
+   - `ALPHA_VANTAGE_API_KEY`: Alpha Vantage から取得した API キー
+   - `CRON_SECRET`: バッチ処理認証用の任意の文字列
 
 3. **古い環境変数を削除**（もし存在する場合）:
+   - ❌ `APIFY_API_TOKEN`（削除 → StockTwits に移行済み、APIキー不要）
+   - ❌ `TWITTER_BEARER_TOKEN`（削除 → StockTwits に移行済み）
    - ❌ `NEXT_PUBLIC_ALPHA_VANTAGE_API_KEY`（削除）
-   - ❌ `NEXT_PUBLIC_TWITTER_BEARER_TOKEN`（削除）
 
-4. 再デプロイ（Gitにpushすれば自動デプロイ）
+4. 再デプロイ（Git に push すれば自動デプロイ）
 
-## セキュリティ改善
+### GitHub Actions（バッチ処理）
 
-### 変更前（セキュリティリスク）
+8 時間ごとのセンチメントバッチ処理を動かすために GitHub Secrets を設定:
 
-```bash
-# ❌ フロントエンドに露出（危険）
-NEXT_PUBLIC_ALPHA_VANTAGE_API_KEY=xxx
-NEXT_PUBLIC_TWITTER_BEARER_TOKEN=xxx
-```
+1. リポジトリの Settings → Secrets and variables → Actions
+2. 以下を登録:
+   - `VERCEL_APP_URL`: `https://your-app.vercel.app`（末尾スラッシュなし）
+   - `CRON_SECRET`: `.env.local` と同じ値
 
-- APIキーがブラウザのJavaScriptに含まれる
-- ユーザーがDevToolsで簡単に閲覧可能
-- APIキーの悪用リスクが高い
+## セキュリティ
 
-### 変更後（セキュア）
+すべての API キーはサーバーサイドのみで使用:
 
 ```bash
 # ✅ サーバーサイドのみ（安全）
 ALPHA_VANTAGE_API_KEY=xxx
-TWITTER_BEARER_TOKEN=xxx
+CRON_SECRET=xxx
 ```
 
-- APIキーはサーバーサイドのみで使用
-- ブラウザには一切露出しない
-- Next.js API Routesを経由してデータ取得
+- API キーはブラウザには一切露出しない
+- Next.js API Routes を経由してデータ取得
 
 ## API エンドポイント
 
-### 株価データAPI
+### 株価データ API
 
 - **Quote**: `/api/stock/quote?symbol=AAPL`
 - **Time Series**: `/api/stock/timeseries?symbol=AAPL`
 
-### ツイート検索API
+### ソーシャルセンチメント API（StockTwits）
 
-- **Search**: `/api/twitter/search?query=crash&symbol=AAPL&max_results=100`
+- **Search by symbol**: `/api/twitter/search?symbol=AAPL`（StockTwits、認証不要）
+- **Sentiment**: `/api/twitter/sentiment?symbol=AAPL`
+- **Batch**: `POST /api/twitter/batch` (GitHub Actions から呼び出し)
 
 ## デモモード
 
-APIキーが設定されていない場合、アプリケーションは自動的にデモモードで動作します：
+株価 API キーが設定されていない場合、アプリケーションは自動的にデモモードで動作します:
 
 - サンプル株価データを生成
-- サンプルツイートを表示
+- センチメントデータなし（「ウォッチリストに追加すると収集開始」と表示）
 - すべての機能をテスト可能
-
-ユーザーは「実データを使用」トグルで、リアルデータとデモデータを切り替えられます。
 
 ## トラブルシューティング
 
-### Alpha Vantage API
+### StockTwits エラー
 
-**問題**: "API rate limit exceeded"
-
-**解決策**:
-- Alpha Vantage無料プランは1分間に5回まで
-- 少し待ってから再試行
-- デモモードに切り替えてテスト
-
-### Twitter API
-
-**問題**: "403 Access denied"
+**問題**: バッチ処理が失敗する
 
 **解決策**:
-1. アプリがX Developer Portalの**プロジェクト内**にあることを確認
-2. Bearer Tokenを再生成
-3. 詳細は `X_API_修正手順.md` を参照
+1. ネットワーク接続を確認（StockTwits API に到達できるか）
+2. レート制限超過の場合は数分待ってから再試行（~60 リクエスト/分）
+3. `/api/check-env` で `stockTwitsEnabled: true` が返されるか確認
+
+### バッチが実行されない
+
+**問題**: センチメントデータが更新されない
+
+**解決策**:
+1. GitHub Actions の実行ログを確認
+2. `VERCEL_APP_URL` と `CRON_SECRET` が GitHub Secrets に正しく設定されているか確認
+3. ウォッチリストに銘柄が登録されているか確認（銘柄がないとバッチはスキップ）
 
 ## よくある質問
 
 ### Q: NEXT_PUBLIC_ プレフィックスは必要？
 
 A: **いいえ**。セキュリティのため、`NEXT_PUBLIC_` プレフィックスは使用しません。
-すべてのAPIキーはサーバーサイド専用です。
+すべての API キーはサーバーサイド専用です。
 
-### Q: .env.local をGitにコミットしていい？
+### Q: .env.local を Git にコミットしていい？
 
 A: **絶対にダメ**。`.env.local` は `.gitignore` に含まれています。
-APIキーは機密情報なので、絶対にバージョン管理システムにコミットしないでください。
-
-### Q: ローカルとVercelで異なる値を使える？
-
-A: **はい**。ローカルは `.env.local`、VercelはVercelの環境変数設定を使用します。
-開発用と本番用で異なるAPIキーを使うことができます。
+API キーは機密情報なので、絶対にバージョン管理システムにコミットしないでください。
 
 ## 参考リンク
 
 - [Next.js Environment Variables](https://nextjs.org/docs/basic-features/environment-variables)
 - [Alpha Vantage Documentation](https://www.alphavantage.co/documentation/)
-- [Twitter API Documentation](https://developer.twitter.com/en/docs/twitter-api)
+- [StockTwits API](https://api-docs.stocktwits.com/)

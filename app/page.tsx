@@ -6,14 +6,12 @@ import { fetchStockData } from './utils/stockAPI';
 import { calculateAllIndicators, getLatestIndicators } from './utils/technicalIndicators';
 import { analyzeSignals, SignalAnalysis } from './utils/signalAnalysis';
 import { runBacktest } from './utils/backtest';
-import { fetchCrashTweets, Tweet } from './utils/twitterAPI';
-import { predictCrash, CrashPrediction, integrateWithTechnicalAnalysis } from './utils/crashPrediction';
-import { addToWatchlistServer, removeFromWatchlistServer, isInWatchlist, getWatchlistFromServer } from './utils/watchlist';
+import { CrashPrediction, integrateWithTechnicalAnalysis } from './utils/crashPrediction';
+import { addToWatchlistServer, removeFromWatchlistServer, getWatchlistFromServer } from './utils/watchlist';
 import { StockChart } from './components/StockChart';
 import { TechnicalIndicators } from './components/TechnicalIndicators';
 import { BuySignal } from './components/BuySignal';
 import BacktestResults from './components/BacktestResults';
-import { CrashPredictionComponent } from './components/CrashPrediction';
 
 interface StockData {
   symbol: string;
@@ -39,10 +37,17 @@ function HomeContent() {
   const [technicalIndicators, setTechnicalIndicators] = useState<ReturnType<typeof getLatestIndicators> | null>(null);
   const [signalAnalysis, setSignalAnalysis] = useState<SignalAnalysis | null>(null);
   const [backtestResult, setBacktestResult] = useState<ReturnType<typeof runBacktest> | null>(null);
-  const [crashPrediction, setCrashPrediction] = useState<CrashPrediction | null>(null);
-  const [crashTweets, setCrashTweets] = useState<Tweet[]>([]);
+  const [batchSentiment, setBatchSentiment] = useState<{
+    tweet_count: number;
+    positive_count: number;
+    neutral_count: number;
+    negative_count: number;
+    negative_keyword_count: number;
+    sentiment_score: number;
+    sample_tweets: { text: string; sentiment: string; createdAt: string }[] | null;
+    fetched_at: string;
+  } | null>(null);
   const [isBacktesting, setIsBacktesting] = useState(false);
-  const [isAnalyzingCrash, setIsAnalyzingCrash] = useState(false);
   const [symbol, setSymbol] = useState('AAPL');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,7 +76,7 @@ function HomeContent() {
     setLoading(true);
     setError(null);
     setBacktestResult(null);
-    setCrashPrediction(null);
+    setBatchSentiment(null);
     setIsFallbackData(false);
     setFallbackReason(null);
 
@@ -106,6 +111,19 @@ function HomeContent() {
       const signals = analyzeSignals(stock.price, signalData);
       setSignalAnalysis(signals);
 
+      // バッチ処理済みセンチメントデータを取得
+      try {
+        const sentimentRes = await fetch(`/api/twitter/sentiment?symbol=${symbol}`);
+        if (sentimentRes.ok) {
+          const sentimentJson = await sentimentRes.json();
+          if (sentimentJson.data) {
+            setBatchSentiment(sentimentJson.data);
+          }
+        }
+      } catch {
+        // センチメントデータ取得失敗は無視（バッチ未実行の場合など）
+      }
+
     } catch (err) {
       console.error('データ取得エラー:', err);
       setError(err instanceof Error ? err.message : 'データの取得に失敗しました');
@@ -129,35 +147,6 @@ function HomeContent() {
       handleSearch();
     }
   }, [symbol, searchParams, handleSearch]);
-
-  const handleCrashAnalysis = async () => {
-    if (!symbol.trim()) return;
-
-    setIsAnalyzingCrash(true);
-    setError(null);
-
-    try {
-      console.log(`${symbol}に関する暴落予測分析を開始...`);
-
-      // X投稿を取得
-      const tweetResult = await fetchCrashTweets(symbol, useRealData, 100);
-      console.log(`${tweetResult.meta.resultCount}件のツイートを取得しました`);
-
-      // ツイートを保存
-      setCrashTweets(tweetResult.tweets);
-
-      // 暴落予測を実行
-      const prediction = predictCrash(tweetResult.tweets);
-      setCrashPrediction(prediction);
-
-      console.log('暴落予測分析が完了しました');
-    } catch (err) {
-      console.error('暴落予測分析エラー:', err);
-      setError(err instanceof Error ? err.message : '暴落予測分析に失敗しました');
-    } finally {
-      setIsAnalyzingCrash(false);
-    }
-  };
 
   const handleBacktest = async () => {
     if (!chartData.length || !technicalIndicators) return;
@@ -413,33 +402,109 @@ function HomeContent() {
               )}
             </div>
 
-            {/* 暴落予測分析セクション */}
+            {/* 暴落予測分析セクション（バッチ処理データ自動表示） */}
             <div className="bg-gray-800 rounded-lg p-6">
               <div className="flex justify-between items-center mb-4">
                 <div>
                   <h3 className="text-xl font-bold">暴落予測分析（X投稿センチメント）</h3>
-                  <p className="text-sm text-gray-400 mt-1">X（旧Twitter）の投稿からネガティブワードを分析</p>
+                  <p className="text-sm text-gray-400 mt-1">X（旧Twitter）の投稿からネガティブワードを自動分析</p>
                 </div>
-                <button
-                  onClick={handleCrashAnalysis}
-                  disabled={isAnalyzingCrash}
-                  className="px-6 py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 rounded-lg transition-colors"
-                >
-                  {isAnalyzingCrash ? '分析中...' : '暴落リスク分析'}
-                </button>
+                {batchSentiment && (
+                  <span className="text-xs text-gray-500">
+                    更新: {new Date(batchSentiment.fetched_at).toLocaleString('ja-JP')}
+                  </span>
+                )}
               </div>
 
-              {crashPrediction && (
-                <CrashPredictionComponent
-                  prediction={crashPrediction}
-                  symbol={stockData.symbol}
-                  tweets={crashTweets}
-                />
-              )}
+              {batchSentiment ? (
+                <div className="space-y-6">
+                  {/* スコア & 概要 */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="bg-gray-700 rounded-lg p-4">
+                      <div className="text-gray-400 text-sm mb-1">センチメントスコア</div>
+                      <div className={`text-3xl font-bold ${
+                        batchSentiment.sentiment_score > 20 ? 'text-green-400' :
+                        batchSentiment.sentiment_score < -20 ? 'text-red-400' : 'text-yellow-400'
+                      }`}>
+                        {batchSentiment.sentiment_score > 0 ? '+' : ''}{batchSentiment.sentiment_score}
+                      </div>
+                    </div>
+                    <div className="bg-gray-700 rounded-lg p-4">
+                      <div className="text-gray-400 text-sm mb-1">分析ツイート数</div>
+                      <div className="text-2xl font-bold">{batchSentiment.tweet_count}件</div>
+                    </div>
+                    <div className="bg-gray-700 rounded-lg p-4">
+                      <div className="text-gray-400 text-sm mb-1">ポジ / ニュートラル / ネガ</div>
+                      <div className="flex items-center gap-2 text-lg font-bold">
+                        <span className="text-green-400">{batchSentiment.positive_count}</span>
+                        <span className="text-gray-500">/</span>
+                        <span className="text-yellow-400">{batchSentiment.neutral_count}</span>
+                        <span className="text-gray-500">/</span>
+                        <span className="text-red-400">{batchSentiment.negative_count}</span>
+                      </div>
+                    </div>
+                    <div className="bg-gray-700 rounded-lg p-4">
+                      <div className="text-gray-400 text-sm mb-1">ネガティブKW検出</div>
+                      <div className={`text-2xl font-bold ${
+                        batchSentiment.negative_keyword_count > 0 ? 'text-red-400' : 'text-gray-400'
+                      }`}>
+                        {batchSentiment.negative_keyword_count}件
+                      </div>
+                    </div>
+                  </div>
 
-              {!crashPrediction && !isAnalyzingCrash && (
+                  {/* センチメントバー */}
+                  {batchSentiment.tweet_count > 0 && (
+                    <div className="bg-gray-700 rounded-lg p-4">
+                      <div className="text-gray-400 text-sm mb-2">センチメント分布</div>
+                      <div className="flex rounded-full h-4 overflow-hidden">
+                        <div
+                          className="bg-green-500 transition-all"
+                          style={{ width: `${(batchSentiment.positive_count / batchSentiment.tweet_count) * 100}%` }}
+                        />
+                        <div
+                          className="bg-yellow-500 transition-all"
+                          style={{ width: `${(batchSentiment.neutral_count / batchSentiment.tweet_count) * 100}%` }}
+                        />
+                        <div
+                          className="bg-red-500 transition-all"
+                          style={{ width: `${(batchSentiment.negative_count / batchSentiment.tweet_count) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 注目ツイート */}
+                  {batchSentiment.sample_tweets && batchSentiment.sample_tweets.length > 0 && (
+                    <div className="bg-gray-700 rounded-lg p-4">
+                      <h4 className="text-sm text-gray-400 mb-3">注目ツイート（エンゲージメント順）</h4>
+                      <div className="space-y-2">
+                        {batchSentiment.sample_tweets.map((tweet, i) => (
+                          <div key={i} className="bg-gray-800 rounded p-3 text-sm">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className={`px-1.5 py-0.5 rounded text-xs ${
+                                tweet.sentiment === 'positive' ? 'bg-green-900 text-green-300' :
+                                tweet.sentiment === 'negative' ? 'bg-red-900 text-red-300' :
+                                'bg-gray-600 text-gray-300'
+                              }`}>
+                                {tweet.sentiment === 'positive' ? 'Positive' :
+                                 tweet.sentiment === 'negative' ? 'Negative' : 'Neutral'}
+                              </span>
+                            </div>
+                            <p className="text-gray-300 line-clamp-2">{tweet.text}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="text-xs text-gray-500 border-t border-gray-700 pt-4">
+                    <p>※ バッチ処理により8時間ごとに自動更新されます。投資判断の際は、テクニカル指標やファンダメンタルズも併せてご検討ください。</p>
+                  </div>
+                </div>
+              ) : (
                 <p className="text-gray-400">
-                  「暴落リスク分析」ボタンをクリックして、X投稿のネガティブセンチメントから暴落リスクを分析できます。
+                  センチメントデータはバッチ処理で自動収集されます。ウォッチリストに追加すると、次回のバッチ処理（8時間ごと）で分析が開始されます。
                 </p>
               )}
             </div>
@@ -475,10 +540,40 @@ function HomeContent() {
                   </div>
                 </div>
 
-                {/* 統合判定（暴落予測込み） */}
-                {crashPrediction && (() => {
+                {/* 統合判定（センチメント込み） */}
+                {batchSentiment && (() => {
+                  // sentiment_score: -100(ネガティブ) ~ +100(ポジティブ)
+                  // riskScore: 0(低リスク) ~ 100(高リスク) に変換
+                  const riskScore = Math.max(0, Math.min(100, 50 - batchSentiment.sentiment_score / 2));
+                  const riskLevel = riskScore >= 75 ? 'critical' : riskScore >= 50 ? 'high' : riskScore >= 30 ? 'medium' : 'low';
+                  const overallSentiment: CrashPrediction['sentiment']['overallSentiment'] =
+                    batchSentiment.sentiment_score > 20 ? 'positive' :
+                    batchSentiment.sentiment_score < -40 ? 'very_negative' :
+                    batchSentiment.sentiment_score < -10 ? 'negative' : 'neutral';
+                  const syntheticPrediction: CrashPrediction = {
+                    riskScore,
+                    riskLevel: riskLevel as CrashPrediction['riskLevel'],
+                    prediction: '',
+                    sentiment: {
+                      averageNegativeScore: batchSentiment.tweet_count > 0
+                        ? Math.round((batchSentiment.negative_count / batchSentiment.tweet_count) * 100)
+                        : 0,
+                      overallSentiment,
+                      totalNegativeWords: batchSentiment.negative_keyword_count,
+                      mostCommonWords: [],
+                    },
+                    tweetAnalysis: {
+                      totalTweets: batchSentiment.tweet_count,
+                      recentTweets: 0,
+                      viralTweets: 0,
+                      averageEngagement: 0,
+                    },
+                    timeline: [],
+                    recommendation: '',
+                    warnings: [],
+                  };
                   const integrated = integrateWithTechnicalAnalysis(
-                    crashPrediction,
+                    syntheticPrediction,
                     signalAnalysis.signal,
                     signalAnalysis.overallScore
                   );

@@ -53,15 +53,13 @@ ALPHA_VANTAGE_API_KEY=your_alpha_vantage_api_key_here
 # Financial Modeling Prep API Key (スクリーナー用 - 推奨)
 FMP_API_KEY=your_fmp_api_key_here
 
-# Twitter API Bearer Token (センチメント分析用)
-TWITTER_BEARER_TOKEN=your_twitter_bearer_token_here
 ```
 
 #### APIキーの取得方法
 
 - **Alpha Vantage**: https://www.alphavantage.co/support/#api-key (無料: 25リクエスト/日)
 - **Financial Modeling Prep**: https://financialmodelingprep.com/developer/docs (無料: 250リクエスト/日)
-- **Twitter API**: https://developer.twitter.com/en/portal/dashboard
+- **StockTwits**: APIキー不要（ソーシャルセンチメントデータを無料で取得）
 
 **注意**: FMP_API_KEYが設定されていない場合、スクリーナーは15銘柄のサンプルデータで動作します。全米国株（1000+銘柄）をスクリーニングするには、FMP APIキーの設定が必要です。
 
@@ -133,19 +131,19 @@ stock-analyzer-2025/
 3. 環境変数を設定:
    - `ALPHA_VANTAGE_API_KEY` (必須)
    - `FMP_API_KEY` (推奨 - 全米国株スクリーニング用)
-   - `TWITTER_BEARER_TOKEN` (オプション)
+   - StockTwits（APIキー不要 - センチメントデータを自動取得）
+   - `CRON_SECRET` (バッチ処理認証用)
 4. デプロイ完了！
 
 詳細: https://vercel.com/docs
 
 ## トラブルシューティング
 
-### Twitter API 401 Unauthorized
+### センチメントデータが更新されない
 
-Bearer Tokenが無効です。X Developer Portalで以下を確認：
-1. アプリがプロジェクト内にあるか
-2. Bearer Tokenを再生成
-3. 新しいトークンを環境変数に設定
+1. GitHub Secrets に `VERCEL_APP_URL` と `CRON_SECRET` が設定されているか確認
+2. GitHub Actions のログを確認
+3. ウォッチリストに銘柄が登録されているか確認
 
 詳細は [X_API_修正手順.md](X_API_修正手順.md) を参照。
 

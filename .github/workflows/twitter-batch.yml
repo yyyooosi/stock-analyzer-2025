@@ -1,0 +1,25 @@
+name: Social Sentiment Batch (StockTwits)
+
+on:
+  schedule:
+    # 8時間ごとに実行（StockTwits レート制限に配慮）
+    - cron: '0 */8 * * *'
+  workflow_dispatch: # 手動実行も可能
+
+jobs:
+  batch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger batch processing
+        run: |
+          response=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST "${{ secrets.VERCEL_APP_URL }}/api/twitter/batch" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json")
+
+          echo "Response status: $response"
+
+          if [ "$response" -ge 500 ]; then
+            echo "Server error, failing job"
+            exit 1
+          fi

@@ -110,3 +110,146 @@ export async function clearWatchlistDb(userEmail: string): Promise<void> {
     throw error;
   }
 }
+
+// =============================================================
+// Twitter Sentiment バッチ処理関連
+// =============================================================
+
+export interface TwitterSentimentRow {
+  id: number;
+  symbol: string;
+  tweet_count: number;
+  positive_count: number;
+  neutral_count: number;
+  negative_count: number;
+  negative_keyword_count: number;
+  sample_tweets: object | null;
+  sentiment_score: number;
+  fetched_at: string;
+}
+
+// twitter_sentiment テーブルの初期化
+export async function initializeSentimentTable() {
+  try {
+    await sql`
+      CREATE TABLE IF NOT EXISTS twitter_sentiment (
+        id SERIAL PRIMARY KEY,
+        symbol TEXT NOT NULL,
+        tweet_count INTEGER NOT NULL DEFAULT 0,
+        positive_count INTEGER NOT NULL DEFAULT 0,
+        neutral_count INTEGER NOT NULL DEFAULT 0,
+        negative_count INTEGER NOT NULL DEFAULT 0,
+        negative_keyword_count INTEGER NOT NULL DEFAULT 0,
+        sample_tweets JSONB,
+        sentiment_score NUMERIC(5,2) NOT NULL DEFAULT 0,
+        fetched_at TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `;
+    await sql`
+      CREATE INDEX IF NOT EXISTS idx_twitter_sentiment_symbol
+      ON twitter_sentiment(symbol)
+    `;
+    await sql`
+      CREATE INDEX IF NOT EXISTS idx_twitter_sentiment_fetched_at
+      ON twitter_sentiment(fetched_at DESC)
+    `;
+    console.log('twitter_sentiment テーブルの初期化が完了しました');
+  } catch (error) {
+    console.error('twitter_sentiment テーブル初期化エラー:', error);
+    throw error;
+  }
+}
+
+// 全ユーザーのウォッチリストからユニーク銘柄を取得し、
+// 未処理 or 最も古いものを1件返す
+export async function getNextSymbolToProcess(): Promise<string | null> {
+  try {
+    const result = await sql`
+      SELECT w.symbol
+      FROM (SELECT DISTINCT symbol FROM watchlist) w
+      LEFT JOIN (
+        SELECT symbol, MAX(fetched_at) AS latest_fetched_at
+        FROM twitter_sentiment
+        GROUP BY symbol
+      ) ts ON w.symbol = ts.symbol
+      ORDER BY ts.latest_fetched_at ASC NULLS FIRST
+      LIMIT 1
+    `;
+    if (result.rowCount === 0) return null;
+    return result.rows[0].symbol;
+  } catch (error) {
+    console.error('次の処理対象銘柄の取得エラー:', error);
+    throw error;
+  }
+}
+
+// センチメント結果をDBに保存
+export async function saveSentimentResult(data: {
+  symbol: string;
+  tweetCount: number;
+  positiveCount: number;
+  neutralCount: number;
+  negativeCount: number;
+  negativeKeywordCount: number;
+  sampleTweets: object[];
+  sentimentScore: number;
+}): Promise<void> {
+  try {
+    const sampleTweetsJson = JSON.stringify(data.sampleTweets);
+    await sql`
+      INSERT INTO twitter_sentiment
+        (symbol, tweet_count, positive_count, neutral_count, negative_count,
+         negative_keyword_count, sample_tweets, sentiment_score, fetched_at)
+      VALUES
+        (${data.symbol}, ${data.tweetCount}, ${data.positiveCount},
+         ${data.neutralCount}, ${data.negativeCount},
+         ${data.negativeKeywordCount}, ${sampleTweetsJson}::jsonb,
+         ${data.sentimentScore}, NOW())
+    `;
+    console.log(`[Database] センチメント保存完了: ${data.symbol}`);
+  } catch (error) {
+    console.error(`[Database] センチメント保存エラー (${data.symbol}):`, error);
+    throw error;
+  }
+}
+
+// 特定銘柄の最新センチメント結果を取得
+export async function getLatestSentiment(symbol: string): Promise<TwitterSentimentRow | null> {
+  try {
+    const result = await sql`
+      SELECT id, symbol, tweet_count, positive_count, neutral_count,
+             negative_count, negative_keyword_count, sample_tweets,
+             sentiment_score, fetched_at
+      FROM twitter_sentiment
+      WHERE symbol = ${symbol.toUpperCase()}
+      ORDER BY fetched_at DESC
+      LIMIT 1
+    `;
+    if (result.rowCount === 0) return null;
+    return result.rows[0] as TwitterSentimentRow;
+  } catch (error) {
+    console.error(`[Database] センチメント取得エラー (${symbol}):`, error);
+    throw error;
+  }
+}
+
+// 複数銘柄の最新センチメント結果を一括取得
+export async function getLatestSentiments(symbols: string[]): Promise<TwitterSentimentRow[]> {
+  try {
+    if (symbols.length === 0) return [];
+    const upperSymbols = symbols.map((s) => s.toUpperCase()).join(',');
+    const result = await sql`
+      SELECT DISTINCT ON (symbol)
+        id, symbol, tweet_count, positive_count, neutral_count,
+        negative_count, negative_keyword_count, sample_tweets,
+        sentiment_score, fetched_at
+      FROM twitter_sentiment
+      WHERE symbol = ANY(string_to_array(${upperSymbols}, ','))
+      ORDER BY symbol, fetched_at DESC
+    `;
+    return result.rows as TwitterSentimentRow[];
+  } catch (error) {
+    console.error('[Database] 一括センチメント取得エラー:', error);
+    throw error;
+  }
+}
