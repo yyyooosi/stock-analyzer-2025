@@ -11,6 +11,7 @@ import {
 import { fetchStockData } from '../utils/stockAPI';
 import { calculateAllIndicators, getLatestIndicators } from '../utils/technicalIndicators';
 import { analyzeSignals, SignalAnalysis } from '../utils/signalAnalysis';
+import { CrashPrediction, integrateWithTechnicalAnalysis } from '../utils/crashPrediction';
 
 interface StockQuote {
   symbol: string;
@@ -21,6 +22,15 @@ interface StockQuote {
   error?: string;
   technicalIndicators?: ReturnType<typeof getLatestIndicators>;
   signalAnalysis?: SignalAnalysis;
+  sentiment?: {
+    sentiment_score: number;
+    tweet_count: number;
+    positive_count: number;
+    neutral_count: number;
+    negative_count: number;
+    negative_keyword_count: number;
+    fetched_at: string;
+  };
 }
 
 export default function WatchlistPage() {
@@ -99,6 +109,20 @@ export default function WatchlistPage() {
           // シグナル分析の実行
           const signals = analyzeSignals(stock.price, signalData);
 
+          // センチメントデータを取得
+          let sentiment: StockQuote['sentiment'] = undefined;
+          try {
+            const sentimentRes = await fetch(`/api/twitter/sentiment?symbol=${item.symbol}`);
+            if (sentimentRes.ok) {
+              const sentimentJson = await sentimentRes.json();
+              if (sentimentJson.data) {
+                sentiment = sentimentJson.data;
+              }
+            }
+          } catch {
+            // センチメントが未取得でも続行
+          }
+
           setStockQuotes(prev => new Map(prev).set(item.symbol, {
             symbol: stock.symbol,
             price: stock.price,
@@ -106,7 +130,8 @@ export default function WatchlistPage() {
             changePercent: stock.changePercent,
             isLoading: false,
             technicalIndicators: latestIndicators,
-            signalAnalysis: signals
+            signalAnalysis: signals,
+            sentiment,
           }));
         } catch (error) {
           console.error(`${item.symbol}の取得に失敗:`, error);
@@ -329,6 +354,12 @@ export default function WatchlistPage() {
                     ボリンジャー
                   </th>
                   <th className="px-4 py-3 text-center text-xs font-semibold text-gray-300">
+                    センチメント
+                  </th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-gray-300">
+                    総合判定
+                  </th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-gray-300">
                     追加日
                   </th>
                   <th className="px-4 py-3 text-center text-xs font-semibold text-gray-300">
@@ -514,6 +545,98 @@ export default function WatchlistPage() {
                           </div>
                         ) : (
                           <span className="text-gray-500">-</span>
+                        )}
+                      </td>
+
+                      {/* センチメント */}
+                      <td className="px-4 py-4 text-center whitespace-nowrap">
+                        {quote?.isLoading ? (
+                          <span className="text-gray-500 text-xs">-</span>
+                        ) : quote?.sentiment ? (
+                          <div className="flex flex-col items-center gap-1">
+                            <span className={`font-bold text-lg ${
+                              quote.sentiment.sentiment_score > 20 ? 'text-green-400' :
+                              quote.sentiment.sentiment_score < -20 ? 'text-red-400' : 'text-yellow-400'
+                            }`}>
+                              {quote.sentiment.sentiment_score > 0 ? '+' : ''}{quote.sentiment.sentiment_score}
+                            </span>
+                            <span className="text-xs text-gray-400">{quote.sentiment.tweet_count}件</span>
+                          </div>
+                        ) : (
+                          <span className="text-gray-500 text-xs">-</span>
+                        )}
+                      </td>
+
+                      {/* 総合判定 */}
+                      <td className="px-4 py-4 text-center whitespace-nowrap">
+                        {quote?.isLoading ? (
+                          <span className="text-gray-500 text-xs">分析中...</span>
+                        ) : quote?.signalAnalysis ? (() => {
+                          const getIntegratedColor = (signal: string) => {
+                            if (signal === 'STRONG_BUY') return 'text-green-500 bg-green-900/30';
+                            if (signal === 'BUY') return 'text-green-400 bg-green-900/30';
+                            if (signal === 'HOLD') return 'text-yellow-400 bg-yellow-900/30';
+                            if (signal === 'SELL') return 'text-orange-400 bg-orange-900/30';
+                            if (signal === 'STRONG_SELL') return 'text-red-500 bg-red-900/30';
+                            return 'text-gray-400 bg-gray-700';
+                          };
+                          const getIntegratedLabel = (signal: string) => {
+                            if (signal === 'STRONG_BUY') return '強い買い';
+                            if (signal === 'BUY') return '買い推奨';
+                            if (signal === 'HOLD') return '様子見';
+                            if (signal === 'SELL') return '売り推奨';
+                            if (signal === 'STRONG_SELL') return '強い売り';
+                            return '判定不能';
+                          };
+                          if (quote.sentiment) {
+                            const riskScore = Math.max(0, Math.min(100, 50 - quote.sentiment.sentiment_score / 2));
+                            const riskLevel = riskScore >= 75 ? 'critical' : riskScore >= 50 ? 'high' : riskScore >= 30 ? 'medium' : 'low';
+                            const overallSentiment: CrashPrediction['sentiment']['overallSentiment'] =
+                              quote.sentiment.sentiment_score > 20 ? 'positive' :
+                              quote.sentiment.sentiment_score < -40 ? 'very_negative' :
+                              quote.sentiment.sentiment_score < -10 ? 'negative' : 'neutral';
+                            const syntheticPrediction: CrashPrediction = {
+                              riskScore,
+                              riskLevel: riskLevel as CrashPrediction['riskLevel'],
+                              prediction: '',
+                              sentiment: {
+                                averageNegativeScore: quote.sentiment.tweet_count > 0
+                                  ? Math.round((quote.sentiment.negative_count / quote.sentiment.tweet_count) * 100)
+                                  : 0,
+                                overallSentiment,
+                                totalNegativeWords: quote.sentiment.negative_keyword_count,
+                                mostCommonWords: [],
+                              },
+                              tweetAnalysis: { totalTweets: quote.sentiment.tweet_count, recentTweets: 0, viralTweets: 0, averageEngagement: 0 },
+                              timeline: [],
+                              recommendation: '',
+                              warnings: [],
+                            };
+                            const integrated = integrateWithTechnicalAnalysis(
+                              syntheticPrediction,
+                              quote.signalAnalysis.signal,
+                              quote.signalAnalysis.overallScore
+                            );
+                            return (
+                              <div className="flex flex-col items-center gap-1">
+                                <span className={`px-2 py-1 rounded text-xs font-semibold ${getIntegratedColor(integrated.finalSignal)}`}>
+                                  {getIntegratedLabel(integrated.finalSignal)}
+                                </span>
+                                <span className="text-sm font-bold">{integrated.finalScore}/100</span>
+                              </div>
+                            );
+                          } else {
+                            return (
+                              <div className="flex flex-col items-center gap-1">
+                                <span className={`px-2 py-1 rounded text-xs font-semibold ${getSignalColor(quote.signalAnalysis.overallScore)}`}>
+                                  {getSignalLabel(quote.signalAnalysis.overallScore)}
+                                </span>
+                                <span className="text-sm font-bold">{quote.signalAnalysis.overallScore}/100</span>
+                              </div>
+                            );
+                          }
+                        })() : (
+                          <span className="text-gray-500 text-xs">-</span>
                         )}
                       </td>
 
