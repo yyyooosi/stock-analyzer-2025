@@ -2,8 +2,10 @@
 
 ## 概要
 
-このアプリケーションは、Apify と Alpha Vantage などの外部 API を使用します。
+このアプリケーションは、Alpha Vantage などの外部 API を使用します。
 セキュリティ向上のため、**すべての API キーはバックエンドで管理**され、フロントエンドには露出しません。
+
+なお、ソーシャルセンチメントデータは **StockTwits API** から取得します（認証不要・APIキー不要）。
 
 ## 必要な環境変数
 
@@ -17,18 +19,7 @@ ALPHA_VANTAGE_API_KEY=your_alpha_vantage_api_key_here
 - **用途**: 株価データと履歴チャートの取得
 - **注意**: `NEXT_PUBLIC_` プレフィックスは**付けない**こと
 
-### 2. Apify API Token（X ツイートデータ）
-
-```bash
-APIFY_API_TOKEN=apify_api_your_token_here
-```
-
-- **取得先**: https://console.apify.com/account/integrations
-- **用途**: X（旧 Twitter）のツイート検索・センチメント分析バッチ処理
-- **無料枠**: $5/月クレジット → 約 10,000 ツイート/月
-- **注意**: `NEXT_PUBLIC_` プレフィックスは**付けない**こと
-
-### 3. CRON_SECRET（バッチ処理認証）
+### 2. CRON_SECRET（バッチ処理認証）
 
 ```bash
 CRON_SECRET=your_cron_secret_here
@@ -36,6 +27,14 @@ CRON_SECRET=your_cron_secret_here
 
 - **用途**: GitHub Actions から `/api/twitter/batch` を呼び出す際の認証
 - **設定**: 任意の安全な文字列を設定し、GitHub Secrets にも同じ値を登録
+
+### 3. StockTwits API（ソーシャルセンチメント）
+
+**APIキー不要・設定不要**。`stockTwitsEnabled: true` が常に返されます。
+
+- **エンドポイント**: `https://api.stocktwits.com/api/2/streams/symbol/{SYMBOL}.json`
+- **用途**: ティッカー別の最新30件の投稿取得・センチメント分析
+- **制限**: ~60 リクエスト/分
 
 ## セットアップ手順
 
@@ -52,9 +51,6 @@ cp .env.example .env.local
 ```bash
 # Alpha Vantage API Key (サーバーサイド専用)
 ALPHA_VANTAGE_API_KEY=your_actual_alpha_vantage_key
-
-# Apify API Token (サーバーサイド専用)
-APIFY_API_TOKEN=apify_api_your_actual_token
 
 # バッチ処理認証シークレット
 CRON_SECRET=your_secret_string
@@ -73,18 +69,17 @@ npm run dev
 
 2. 以下の環境変数を追加:
    - `ALPHA_VANTAGE_API_KEY`: Alpha Vantage から取得した API キー
-   - `APIFY_API_TOKEN`: Apify Console から取得した API トークン
    - `CRON_SECRET`: バッチ処理認証用の任意の文字列
 
 3. **古い環境変数を削除**（もし存在する場合）:
-   - ❌ `TWITTER_BEARER_TOKEN`（削除 → Apify に移行済み）
+   - ❌ `TWITTER_BEARER_TOKEN`（削除 → StockTwits に移行済み）
    - ❌ `NEXT_PUBLIC_ALPHA_VANTAGE_API_KEY`（削除）
 
 4. 再デプロイ（Git に push すれば自動デプロイ）
 
 ### GitHub Actions（バッチ処理）
 
-15 分ごとのセンチメントバッチ処理を動かすために GitHub Secrets を設定:
+8 時間ごとのセンチメントバッチ処理を動かすために GitHub Secrets を設定:
 
 1. リポジトリの Settings → Secrets and variables → Actions
 2. 以下を登録:
@@ -98,7 +93,6 @@ npm run dev
 ```bash
 # ✅ サーバーサイドのみ（安全）
 ALPHA_VANTAGE_API_KEY=xxx
-APIFY_API_TOKEN=xxx
 CRON_SECRET=xxx
 ```
 
@@ -112,15 +106,15 @@ CRON_SECRET=xxx
 - **Quote**: `/api/stock/quote?symbol=AAPL`
 - **Time Series**: `/api/stock/timeseries?symbol=AAPL`
 
-### ツイート API
+### ソーシャルセンチメント API（StockTwits）
 
-- **Search**: `/api/twitter/search?query=crash&max_results=20`
+- **Search by symbol**: `/api/twitter/search?symbol=AAPL`（StockTwits、認証不要）
 - **Sentiment**: `/api/twitter/sentiment?symbol=AAPL`
 - **Batch**: `POST /api/twitter/batch` (GitHub Actions から呼び出し)
 
 ## デモモード
 
-API キーが設定されていない場合、アプリケーションは自動的にデモモードで動作します:
+株価 API キーが設定されていない場合、アプリケーションは自動的にデモモードで動作します:
 
 - サンプル株価データを生成
 - センチメントデータなし（「ウォッチリストに追加すると収集開始」と表示）
@@ -128,14 +122,14 @@ API キーが設定されていない場合、アプリケーションは自動�
 
 ## トラブルシューティング
 
-### Apify エラー
+### StockTwits エラー
 
 **問題**: バッチ処理が失敗する
 
 **解決策**:
-1. `APIFY_API_TOKEN` が正しく設定されているか確認
-2. Apify Console でクレジット残高を確認（無料枠: $5/月）
-3. Actor `apidojo/tweet-scraper` が利用可能か確認
+1. ネットワーク接続を確認（StockTwits API に到達できるか）
+2. レート制限超過の場合は数分待ってから再試行（~60 リクエスト/分）
+3. `/api/check-env` で `stockTwitsEnabled: true` が返されるか確認
 
 ### バッチが実行されない
 
@@ -162,5 +156,4 @@ API キーは機密情報なので、絶対にバージョン管理システム�
 
 - [Next.js Environment Variables](https://nextjs.org/docs/basic-features/environment-variables)
 - [Alpha Vantage Documentation](https://www.alphavantage.co/documentation/)
-- [Apify Documentation](https://docs.apify.com/)
-- [Apify Tweet Scraper](https://apify.com/apidojo/tweet-scraper)
+- [StockTwits API](https://api-docs.stocktwits.com/)

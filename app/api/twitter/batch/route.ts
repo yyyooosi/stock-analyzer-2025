@@ -16,7 +16,7 @@ import {
  * GitHub Actions (0 *\/8 * * *) から8時間ごとに呼び出される。
  * 1回の実行で1銘柄だけ処理する。
  *
- * データソース: Apify Tweet Scraper (APIFY_API_TOKEN が必要)
+ * データソース: StockTwits API（認証不要・無料）
  *
  * 処理順序:
  *   1. まだセンチメントデータがない銘柄（新規追加分）
@@ -47,20 +47,20 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Batch] 処理開始: ${symbol}`);
 
-    // Apify でツイートを取得 → センチメント分析
+    // StockTwits でメッセージを取得 → センチメント分析
     let tweets;
     let usedDemo = false;
     try {
       tweets = await searchTickerMentionsDirect(symbol, 20);
     } catch (apiError) {
       console.warn(
-        `[Batch] Apify エラー (${symbol}), デモデータをスキップ:`,
+        `[Batch] StockTwits エラー (${symbol}), デモデータをスキップ:`,
         apiError instanceof Error ? apiError.message : apiError
       );
-      // Apify エラー時はデモデータを保存せず、次回のバッチに任せる（PR38の方針）
+      // エラー時はデモデータを保存せず、次回のバッチに任せる
       return NextResponse.json({
         success: false,
-        message: `Apify からのデータ取得に失敗しました: ${apiError instanceof Error ? apiError.message : 'Unknown error'}`,
+        message: `StockTwits からのデータ取得に失敗しました: ${apiError instanceof Error ? apiError.message : 'Unknown error'}`,
         processed: { symbol, usedDemoData: false },
       });
     }

@@ -220,15 +220,10 @@ export async function searchTickerMentions(
   maxResults: number = 100
 ): Promise<TwitterSearchResult> {
   try {
-    // 検索クエリの構築（ティッカーシンボルのみ）
-    let query = `${symbol}`;
-
-    // リツイートを除外し、日本語または英語のツイートのみ
-    query += ' -is:retweet (lang:ja OR lang:en)';
-
-    // Next.js API Routeを経由してリクエスト
+    // StockTwits を使用（symbol パラメータ経由）
+    // フォールバック: TWITTER_BEARER_TOKEN があれば X API を使用
     const params = new URLSearchParams({
-      query: query,
+      symbol: symbol.trim().toUpperCase(),
       max_results: Math.min(maxResults, 100).toString(),
     });
 
@@ -303,7 +298,7 @@ export async function searchTickerMentions(
 }
 
 // =============================================================
-// バッチ処理用: サーバーサイドから Apify 経由でツイートを直接取得
+// バッチ処理用: サーバーサイドから StockTwits 経由でツイートを直接取得
 // =============================================================
 
 export interface SentimentAggregation {
@@ -317,20 +312,19 @@ export interface SentimentAggregation {
 }
 
 /**
- * Apify 経由でティッカーメンション検索（バッチ処理用サーバーサイド関数）
+ * StockTwits 経由でティッカーメンション検索（バッチ処理用サーバーサイド関数）
  * クライアント用の searchTickerMentions は /api/twitter/search を経由するが、
- * バッチ処理はサーバー内で完結させるためここから直接 Apify を呼ぶ。
+ * バッチ処理はサーバー内で完結させるためここから直接 StockTwits を呼ぶ。
+ * 認証不要・完全無料（APIキー不要）。
  */
 export async function searchTickerMentionsDirect(
   symbol: string,
   maxResults: number = 20
 ): Promise<Tweet[]> {
-  // 動的インポートで循環依存を回避
-  const { searchTweetsViaApify } = await import('./apifyTwitter');
+  const { getStockTwitsStream } = await import('./stockTwitsAPI');
 
-  const query = `${symbol} -is:retweet`;
-  const result = await searchTweetsViaApify(query, Math.min(maxResults, 100));
-  return result.tweets;
+  const result = await getStockTwitsStream(symbol.trim().toUpperCase());
+  return result.tweets.slice(0, Math.min(maxResults, 30));
 }
 
 /**

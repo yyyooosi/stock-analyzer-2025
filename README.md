@@ -53,15 +53,13 @@ ALPHA_VANTAGE_API_KEY=your_alpha_vantage_api_key_here
 # Financial Modeling Prep API Key (スクリーナー用 - 推奨)
 FMP_API_KEY=your_fmp_api_key_here
 
-# Apify API Token (Xツイートセンチメント分析用)
-APIFY_API_TOKEN=apify_api_your_token_here
 ```
 
 #### APIキーの取得方法
 
 - **Alpha Vantage**: https://www.alphavantage.co/support/#api-key (無料: 25リクエスト/日)
 - **Financial Modeling Prep**: https://financialmodelingprep.com/developer/docs (無料: 250リクエスト/日)
-- **Apify**: https://console.apify.com/account/integrations (無料: $5/月クレジット)
+- **StockTwits**: APIキー不要（ソーシャルセンチメントデータを無料で取得）
 
 **注意**: FMP_API_KEYが設定されていない場合、スクリーナーは15銘柄のサンプルデータで動作します。全米国株（1000+銘柄）をスクリーニングするには、FMP APIキーの設定が必要です。
 
@@ -133,7 +131,7 @@ stock-analyzer-2025/
 3. 環境変数を設定:
    - `ALPHA_VANTAGE_API_KEY` (必須)
    - `FMP_API_KEY` (推奨 - 全米国株スクリーニング用)
-   - `APIFY_API_TOKEN` (推奨 - Xセンチメント分析用)
+   - StockTwits（APIキー不要 - センチメントデータを自動取得）
    - `CRON_SECRET` (バッチ処理認証用)
 4. デプロイ完了！
 

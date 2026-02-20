@@ -1,8 +1,8 @@
-name: Twitter Sentiment Batch (Apify)
+name: Social Sentiment Batch (StockTwits)
 
 on:
   schedule:
-    # 8時間ごとに実行（Apify 無料枠 $5/月 に収めるため）
+    # 8時間ごとに実行（StockTwits レート制限に配慮）
     - cron: '0 */8 * * *'
   workflow_dispatch: # 手動実行も可能
 

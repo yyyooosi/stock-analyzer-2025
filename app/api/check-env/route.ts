@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
 
     // External APIs (存在のみ)
     stockApiConfigured: !!(process.env.FMP_API_KEY || process.env.ALPHA_VANTAGE_API_KEY),
-    apifyConfigured: !!process.env.APIFY_API_TOKEN,
+    stockTwitsEnabled: true, // StockTwits API は認証不要のため常に有効
     fredApiConfigured: !!process.env.FRED_API_KEY,
 
     // Node環境

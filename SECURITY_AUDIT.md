@@ -79,7 +79,7 @@ All external API keys are properly managed:
 ```
 ALPHA_VANTAGE_API_KEY   - Server-side only
 FMP_API_KEY             - Server-side only, masked in logs
-APIFY_API_TOKEN         - Server-side only (X tweet scraper)
+# StockTwits: no API token required (public endpoint)
 FRED_API_KEY            - Server-side only, masked in logs
 CRON_SECRET             - Server-side only (batch job auth)
 AUTH_SECRET             - Server-side only
