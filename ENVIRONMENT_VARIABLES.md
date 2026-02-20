@@ -72,7 +72,6 @@ npm run dev
    - `CRON_SECRET`: バッチ処理認証用の任意の文字列
 
 3. **古い環境変数を削除**（もし存在する場合）:
-   - ❌ `APIFY_API_TOKEN`（削除 → StockTwits に移行済み、APIキー不要）
    - ❌ `TWITTER_BEARER_TOKEN`（削除 → StockTwits に移行済み）
    - ❌ `NEXT_PUBLIC_ALPHA_VANTAGE_API_KEY`（削除）
 
