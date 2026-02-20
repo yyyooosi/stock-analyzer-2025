@@ -7,7 +7,6 @@ import {
 import {
   searchTickerMentionsDirect,
   aggregateSentiment,
-  generateSampleTweets,
 } from '@/app/utils/twitterAPI';
 
 /**
@@ -49,15 +48,13 @@ export async function POST(request: NextRequest) {
 
     // StockTwits でメッセージを取得 → センチメント分析
     let tweets;
-    let usedDemo = false;
     try {
       tweets = await searchTickerMentionsDirect(symbol, 20);
     } catch (apiError) {
       console.warn(
-        `[Batch] StockTwits エラー (${symbol}), デモデータをスキップ:`,
+        `[Batch] StockTwits エラー (${symbol}), スキップ:`,
         apiError instanceof Error ? apiError.message : apiError
       );
-      // エラー時はデモデータを保存せず、次回のバッチに任せる
       return NextResponse.json({
         success: false,
         message: `StockTwits からのデータ取得に失敗しました: ${apiError instanceof Error ? apiError.message : 'Unknown error'}`,
@@ -65,12 +62,14 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // ツイートが0件の場合はデモデータで記録
+    // ツイートが0件の場合はスキップ（保存しない）
     if (tweets.length === 0) {
-      console.warn(`[Batch] ${symbol} のツイートが0件、デモデータで記録`);
-      const demoResult = generateSampleTweets(symbol);
-      tweets = demoResult.tweets;
-      usedDemo = true;
+      console.warn(`[Batch] ${symbol} のツイートが0件、スキップ`);
+      return NextResponse.json({
+        success: true,
+        message: `${symbol} のデータなし（スキップ）`,
+        processed: { symbol, tweetCount: 0, usedDemoData: false },
+      });
     }
 
     const aggregation = aggregateSentiment(tweets);
@@ -100,7 +99,7 @@ export async function POST(request: NextRequest) {
         positiveCount: aggregation.positiveCount,
         neutralCount: aggregation.neutralCount,
         negativeCount: aggregation.negativeCount,
-        usedDemoData: usedDemo,
+        usedDemoData: false,
       },
     });
   } catch (error) {

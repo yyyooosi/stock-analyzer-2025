@@ -359,156 +359,6 @@ function HomeContent() {
               </div>
             </div>
 
-            {/* チャート */}
-            <StockChart data={chartData} symbol={stockData.symbol} />
-
-            {/* テクニカル指標 */}
-            {technicalIndicators && (
-              <TechnicalIndicators 
-                indicators={technicalIndicators} 
-                currentPrice={stockData.price}
-              />
-            )}
-
-            {/* 買いシグナル分析 */}
-            {signalAnalysis && (
-              <BuySignal 
-                analysis={signalAnalysis} 
-                symbol={stockData.symbol}
-              />
-            )}
-
-            {/* バックテストセクション */}
-            <div className="bg-gray-800 rounded-lg p-6">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-xl font-bold">バックテスト分析</h3>
-                <button
-                  onClick={handleBacktest}
-                  disabled={isBacktesting || !chartData.length}
-                  className="px-6 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 rounded-lg transition-colors"
-                >
-                  {isBacktesting ? 'バックテスト実行中...' : 'バックテスト実行'}
-                </button>
-              </div>
-
-              {backtestResult && (
-                <BacktestResults result={backtestResult} />
-              )}
-
-              {!backtestResult && !isBacktesting && (
-                <p className="text-gray-400">
-                  「バックテスト実行」ボタンをクリックして、過去30日間の取引戦略の効果を分析できます。
-                </p>
-              )}
-            </div>
-
-            {/* 暴落予測分析セクション（バッチ処理データ自動表示） */}
-            <div className="bg-gray-800 rounded-lg p-6">
-              <div className="flex justify-between items-center mb-4">
-                <div>
-                  <h3 className="text-xl font-bold">暴落予測分析（X投稿センチメント）</h3>
-                  <p className="text-sm text-gray-400 mt-1">X（旧Twitter）の投稿からネガティブワードを自動分析</p>
-                </div>
-                {batchSentiment && (
-                  <span className="text-xs text-gray-500">
-                    更新: {new Date(batchSentiment.fetched_at).toLocaleString('ja-JP')}
-                  </span>
-                )}
-              </div>
-
-              {batchSentiment ? (
-                <div className="space-y-6">
-                  {/* スコア & 概要 */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="bg-gray-700 rounded-lg p-4">
-                      <div className="text-gray-400 text-sm mb-1">センチメントスコア</div>
-                      <div className={`text-3xl font-bold ${
-                        batchSentiment.sentiment_score > 20 ? 'text-green-400' :
-                        batchSentiment.sentiment_score < -20 ? 'text-red-400' : 'text-yellow-400'
-                      }`}>
-                        {batchSentiment.sentiment_score > 0 ? '+' : ''}{batchSentiment.sentiment_score}
-                      </div>
-                    </div>
-                    <div className="bg-gray-700 rounded-lg p-4">
-                      <div className="text-gray-400 text-sm mb-1">分析ツイート数</div>
-                      <div className="text-2xl font-bold">{batchSentiment.tweet_count}件</div>
-                    </div>
-                    <div className="bg-gray-700 rounded-lg p-4">
-                      <div className="text-gray-400 text-sm mb-1">ポジ / ニュートラル / ネガ</div>
-                      <div className="flex items-center gap-2 text-lg font-bold">
-                        <span className="text-green-400">{batchSentiment.positive_count}</span>
-                        <span className="text-gray-500">/</span>
-                        <span className="text-yellow-400">{batchSentiment.neutral_count}</span>
-                        <span className="text-gray-500">/</span>
-                        <span className="text-red-400">{batchSentiment.negative_count}</span>
-                      </div>
-                    </div>
-                    <div className="bg-gray-700 rounded-lg p-4">
-                      <div className="text-gray-400 text-sm mb-1">ネガティブKW検出</div>
-                      <div className={`text-2xl font-bold ${
-                        batchSentiment.negative_keyword_count > 0 ? 'text-red-400' : 'text-gray-400'
-                      }`}>
-                        {batchSentiment.negative_keyword_count}件
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* センチメントバー */}
-                  {batchSentiment.tweet_count > 0 && (
-                    <div className="bg-gray-700 rounded-lg p-4">
-                      <div className="text-gray-400 text-sm mb-2">センチメント分布</div>
-                      <div className="flex rounded-full h-4 overflow-hidden">
-                        <div
-                          className="bg-green-500 transition-all"
-                          style={{ width: `${(batchSentiment.positive_count / batchSentiment.tweet_count) * 100}%` }}
-                        />
-                        <div
-                          className="bg-yellow-500 transition-all"
-                          style={{ width: `${(batchSentiment.neutral_count / batchSentiment.tweet_count) * 100}%` }}
-                        />
-                        <div
-                          className="bg-red-500 transition-all"
-                          style={{ width: `${(batchSentiment.negative_count / batchSentiment.tweet_count) * 100}%` }}
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 注目ツイート */}
-                  {batchSentiment.sample_tweets && batchSentiment.sample_tweets.length > 0 && (
-                    <div className="bg-gray-700 rounded-lg p-4">
-                      <h4 className="text-sm text-gray-400 mb-3">注目ツイート（エンゲージメント順）</h4>
-                      <div className="space-y-2">
-                        {batchSentiment.sample_tweets.map((tweet, i) => (
-                          <div key={i} className="bg-gray-800 rounded p-3 text-sm">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className={`px-1.5 py-0.5 rounded text-xs ${
-                                tweet.sentiment === 'positive' ? 'bg-green-900 text-green-300' :
-                                tweet.sentiment === 'negative' ? 'bg-red-900 text-red-300' :
-                                'bg-gray-600 text-gray-300'
-                              }`}>
-                                {tweet.sentiment === 'positive' ? 'Positive' :
-                                 tweet.sentiment === 'negative' ? 'Negative' : 'Neutral'}
-                              </span>
-                            </div>
-                            <p className="text-gray-300 line-clamp-2">{tweet.text}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="text-xs text-gray-500 border-t border-gray-700 pt-4">
-                    <p>※ バッチ処理により8時間ごとに自動更新されます。投資判断の際は、テクニカル指標やファンダメンタルズも併せてご検討ください。</p>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-gray-400">
-                  センチメントデータはバッチ処理で自動収集されます。ウォッチリストに追加すると、次回のバッチ処理（8時間ごと）で分析が開始されます。
-                </p>
-              )}
-            </div>
-
             {/* 総合判定 */}
             {signalAnalysis && (
               <div className="bg-gray-800 rounded-lg p-6">
@@ -542,8 +392,6 @@ function HomeContent() {
 
                 {/* 統合判定（センチメント込み） */}
                 {batchSentiment && (() => {
-                  // sentiment_score: -100(ネガティブ) ~ +100(ポジティブ)
-                  // riskScore: 0(低リスク) ~ 100(高リスク) に変換
                   const riskScore = Math.max(0, Math.min(100, 50 - batchSentiment.sentiment_score / 2));
                   const riskLevel = riskScore >= 75 ? 'critical' : riskScore >= 50 ? 'high' : riskScore >= 30 ? 'medium' : 'low';
                   const overallSentiment: CrashPrediction['sentiment']['overallSentiment'] =
@@ -629,6 +477,150 @@ function HomeContent() {
                     </div>
                   );
                 })()}
+              </div>
+            )}
+
+            {/* チャート */}
+            <StockChart data={chartData} symbol={stockData.symbol} />
+
+            {/* テクニカル指標 */}
+            {technicalIndicators && (
+              <TechnicalIndicators 
+                indicators={technicalIndicators} 
+                currentPrice={stockData.price}
+              />
+            )}
+
+            {/* 買いシグナル分析 */}
+            {signalAnalysis && (
+              <BuySignal 
+                analysis={signalAnalysis} 
+                symbol={stockData.symbol}
+              />
+            )}
+
+            {/* バックテストセクション */}
+            <div className="bg-gray-800 rounded-lg p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-bold">バックテスト分析</h3>
+                <button
+                  onClick={handleBacktest}
+                  disabled={isBacktesting || !chartData.length}
+                  className="px-6 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 rounded-lg transition-colors"
+                >
+                  {isBacktesting ? 'バックテスト実行中...' : 'バックテスト実行'}
+                </button>
+              </div>
+
+              {backtestResult && (
+                <BacktestResults result={backtestResult} />
+              )}
+
+              {!backtestResult && !isBacktesting && (
+                <p className="text-gray-400">
+                  「バックテスト実行」ボタンをクリックして、過去30日間の取引戦略の効果を分析できます。
+                </p>
+              )}
+            </div>
+
+            {/* 暴落予測分析セクション（バッチ処理データ自動表示） */}
+            {batchSentiment && (
+              <div className="bg-gray-800 rounded-lg p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <div>
+                    <h3 className="text-xl font-bold">暴落予測分析（X投稿センチメント）</h3>
+                    <p className="text-sm text-gray-400 mt-1">X（旧Twitter）の投稿からネガティブワードを自動分析</p>
+                  </div>
+                  <span className="text-xs text-gray-500">
+                    更新: {new Date(batchSentiment.fetched_at).toLocaleString('ja-JP')}
+                  </span>
+                </div>
+
+                <div className="space-y-6">
+                  {/* スコア & 概要 */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="bg-gray-700 rounded-lg p-4">
+                      <div className="text-gray-400 text-sm mb-1">センチメントスコア</div>
+                      <div className={`text-3xl font-bold ${
+                        batchSentiment.sentiment_score > 20 ? 'text-green-400' :
+                        batchSentiment.sentiment_score < -20 ? 'text-red-400' : 'text-yellow-400'
+                      }`}>
+                        {batchSentiment.sentiment_score > 0 ? '+' : ''}{batchSentiment.sentiment_score}
+                      </div>
+                    </div>
+                    <div className="bg-gray-700 rounded-lg p-4">
+                      <div className="text-gray-400 text-sm mb-1">分析ツイート数</div>
+                      <div className="text-2xl font-bold">{batchSentiment.tweet_count}件</div>
+                    </div>
+                    <div className="bg-gray-700 rounded-lg p-4">
+                      <div className="text-gray-400 text-sm mb-1">ポジ / ニュートラル / ネガ</div>
+                      <div className="flex items-center gap-2 text-lg font-bold">
+                        <span className="text-green-400">{batchSentiment.positive_count}</span>
+                        <span className="text-gray-500">/</span>
+                        <span className="text-yellow-400">{batchSentiment.neutral_count}</span>
+                        <span className="text-gray-500">/</span>
+                        <span className="text-red-400">{batchSentiment.negative_count}</span>
+                      </div>
+                    </div>
+                    <div className="bg-gray-700 rounded-lg p-4">
+                      <div className="text-gray-400 text-sm mb-1">ネガティブKW検出</div>
+                      <div className={`text-2xl font-bold ${
+                        batchSentiment.negative_keyword_count > 0 ? 'text-red-400' : 'text-gray-400'
+                      }`}>
+                        {batchSentiment.negative_keyword_count}件
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* センチメントバー */}
+                  {batchSentiment.tweet_count > 0 && (
+                    <div className="bg-gray-700 rounded-lg p-4">
+                      <div className="text-gray-400 text-sm mb-2">センチメント分布</div>
+                      <div className="flex rounded-full h-4 overflow-hidden">
+                        <div
+                          className="bg-green-500 transition-all"
+                          style={{ width: `${(batchSentiment.positive_count / batchSentiment.tweet_count) * 100}%` }}
+                        />
+                        <div
+                          className="bg-yellow-500 transition-all"
+                          style={{ width: `${(batchSentiment.neutral_count / batchSentiment.tweet_count) * 100}%` }}
+                        />
+                        <div
+                          className="bg-red-500 transition-all"
+                          style={{ width: `${(batchSentiment.negative_count / batchSentiment.tweet_count) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 注目ツイート */}
+                  {batchSentiment.sample_tweets && batchSentiment.sample_tweets.length > 0 && (
+                    <div className="bg-gray-700 rounded-lg p-4">
+                      <h4 className="text-sm text-gray-400 mb-3">注目ツイート（エンゲージメント順）</h4>
+                      <div className="space-y-2">
+                        {batchSentiment.sample_tweets.map((tweet, i) => (
+                          <div key={i} className="bg-gray-800 rounded p-3 text-sm">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className={`px-1.5 py-0.5 rounded text-xs ${
+                                tweet.sentiment === 'positive' ? 'bg-green-900 text-green-300' :
+                                tweet.sentiment === 'negative' ? 'bg-red-900 text-red-300' :
+                                'bg-gray-600 text-gray-300'
+                              }`}>
+                                {tweet.sentiment === 'positive' ? 'Positive' :
+                                 tweet.sentiment === 'negative' ? 'Negative' : 'Neutral'}
+                              </span>
+                            </div>
+                            <p className="text-gray-300 line-clamp-2">{tweet.text}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="text-xs text-gray-500 border-t border-gray-700 pt-4">
+                    <p>※ バッチ処理により8時間ごとに自動更新されます。投資判断の際は、テクニカル指標やファンダメンタルズも併せてご検討ください。</p>
+                  </div>
+                </div>
               </div>
             )}
           </div>
