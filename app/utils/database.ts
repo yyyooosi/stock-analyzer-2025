@@ -163,6 +163,13 @@ export async function initializeSentimentTable() {
 // 全ユーザーのウォッチリストからユニーク銘柄を取得し、
 // 未処理 or 最も古いものを1件返す
 export async function getNextSymbolToProcess(): Promise<string | null> {
+  const symbols = await getNextSymbolsToProcess(1);
+  return symbols.length > 0 ? symbols[0] : null;
+}
+
+// 全ユーザーのウォッチリストからユニーク銘柄を取得し、
+// 未処理 or 最も古いものを最大 limit 件返す
+export async function getNextSymbolsToProcess(limit: number = 10): Promise<string[]> {
   try {
     const result = await sql`
       SELECT w.symbol
@@ -173,10 +180,9 @@ export async function getNextSymbolToProcess(): Promise<string | null> {
         GROUP BY symbol
       ) ts ON w.symbol = ts.symbol
       ORDER BY ts.latest_fetched_at ASC NULLS FIRST
-      LIMIT 1
+      LIMIT ${limit}
     `;
-    if (result.rowCount === 0) return null;
-    return result.rows[0].symbol;
+    return result.rows.map((row) => row.symbol as string);
   } catch (error) {
     console.error('次の処理対象銘柄の取得エラー:', error);
     throw error;
