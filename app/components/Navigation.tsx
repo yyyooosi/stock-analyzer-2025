@@ -26,6 +26,12 @@ export default async function Navigation() {
                 スクリーニング
               </Link>
               <Link
+                href="/bsi"
+                className="px-3 py-2 rounded-md text-sm font-medium transition-colors text-yellow-400 hover:bg-gray-700 hover:text-yellow-300"
+              >
+                BSI
+              </Link>
+              <Link
                 href="/risk-monitor"
                 className="px-3 py-2 rounded-md text-sm font-medium transition-colors text-red-400 hover:bg-gray-700 hover:text-red-300"
               >
