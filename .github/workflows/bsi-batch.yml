@@ -11,7 +11,7 @@ jobs:
     steps:
       - name: BSI スコアを計算
         run: |
-          curl -f -X POST "${{ secrets.NEXT_PUBLIC_APP_URL }}/api/bsi/calculate" \
+          curl -f -X POST "${{ secrets.VERCEL_APP_URL }}/api/bsi/calculate" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             -H "Content-Type: application/json" \
             --max-time 30
