@@ -144,7 +144,7 @@ export default function BsiPage() {
     setCalculating(true);
     setError(null);
     try {
-      const res = await fetch('/api/bsi/calculate', { method: 'POST' });
+      const res = await fetch('/api/bsi/trigger', { method: 'POST' });
       const json = await res.json();
       if (json.success) {
         await fetchData();
