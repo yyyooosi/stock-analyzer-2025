@@ -102,12 +102,21 @@ export async function saveBsiSnapshot(data: {
   moveIndex: number | null;
   mag7Share: number | null;
 }): Promise<void> {
+  const today = new Date().toISOString().split('T')[0];
   await sql`
     INSERT INTO bsi_snapshots
-      (score, liquidity_score, concentration_score, yield_curve, move_index, mag7_share)
+      (date, score, liquidity_score, concentration_score, yield_curve, move_index, mag7_share)
     VALUES
-      (${data.score}, ${data.liquidityScore}, ${data.concentrationScore},
+      (${today}, ${data.score}, ${data.liquidityScore}, ${data.concentrationScore},
        ${data.yieldCurve}, ${data.moveIndex}, ${data.mag7Share})
+    ON CONFLICT (date) DO UPDATE SET
+      score               = EXCLUDED.score,
+      liquidity_score     = EXCLUDED.liquidity_score,
+      concentration_score = EXCLUDED.concentration_score,
+      yield_curve         = EXCLUDED.yield_curve,
+      move_index          = EXCLUDED.move_index,
+      mag7_share          = EXCLUDED.mag7_share,
+      calculated_at       = NOW()
   `;
 }
 
