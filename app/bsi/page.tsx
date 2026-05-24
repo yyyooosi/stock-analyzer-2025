@@ -361,7 +361,7 @@ export default function BsiPage() {
             {/* 履歴チャート */}
             {history.length > 0 && (
               <div className="bg-gray-800 rounded-xl p-6">
-                <h2 className="text-lg font-bold mb-4">BSI 推移 (直近 {history.length} 日)</h2>
+                <h2 className="text-lg font-bold mb-4">BSI 推移 (直近 90 日)</h2>
                 <Line data={chartData} options={chartOptions} />
               </div>
             )}
