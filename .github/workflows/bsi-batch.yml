@@ -14,4 +14,4 @@ jobs:
           curl -f -X POST "${{ secrets.VERCEL_APP_URL }}/api/bsi/calculate" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             -H "Content-Type: application/json" \
-            --max-time 30
+            --max-time 55

@@ -10,6 +10,7 @@ export interface BsiIndicatorRow {
 
 export interface BsiSnapshotRow {
   id: number;
+  date: string;
   score: number;
   liquidity_score: number;
   concentration_score: number;
@@ -37,6 +38,7 @@ export async function initializeBsiTables(): Promise<void> {
   await sql`
     CREATE TABLE IF NOT EXISTS bsi_snapshots (
       id                  SERIAL PRIMARY KEY,
+      date                DATE NOT NULL UNIQUE,
       score               NUMERIC(5, 2) NOT NULL,
       liquidity_score     NUMERIC(5, 2),
       concentration_score NUMERIC(5, 2),
@@ -45,6 +47,26 @@ export async function initializeBsiTables(): Promise<void> {
       mag7_share          NUMERIC(6, 4),
       calculated_at       TIMESTAMP NOT NULL DEFAULT NOW()
     )
+  `;
+  // 既存テーブルに date カラムがなければ追加するMigration
+  await sql`
+    ALTER TABLE bsi_snapshots ADD COLUMN IF NOT EXISTS date DATE
+  `;
+  await sql`
+    UPDATE bsi_snapshots SET date = calculated_at::date WHERE date IS NULL
+  `;
+  // 同日の重複を削除（最新1件のみ保持）してからUNIQUEインデックスを作成
+  await sql`
+    DELETE FROM bsi_snapshots
+    WHERE id NOT IN (
+      SELECT DISTINCT ON (date) id
+      FROM bsi_snapshots
+      ORDER BY date, calculated_at DESC
+    )
+  `;
+  await sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_bsi_snapshots_date
+      ON bsi_snapshots(date)
   `;
   await sql`
     CREATE INDEX IF NOT EXISTS idx_bsi_snapshots_calculated_at
@@ -102,34 +124,44 @@ export async function saveBsiSnapshot(data: {
   moveIndex: number | null;
   mag7Share: number | null;
 }): Promise<void> {
+  const today = new Date().toISOString().split('T')[0];
   await sql`
     INSERT INTO bsi_snapshots
-      (score, liquidity_score, concentration_score, yield_curve, move_index, mag7_share)
+      (date, score, liquidity_score, concentration_score, yield_curve, move_index, mag7_share)
     VALUES
-      (${data.score}, ${data.liquidityScore}, ${data.concentrationScore},
+      (${today}, ${data.score}, ${data.liquidityScore}, ${data.concentrationScore},
        ${data.yieldCurve}, ${data.moveIndex}, ${data.mag7Share})
+    ON CONFLICT (date) DO UPDATE SET
+      score               = EXCLUDED.score,
+      liquidity_score     = EXCLUDED.liquidity_score,
+      concentration_score = EXCLUDED.concentration_score,
+      yield_curve         = EXCLUDED.yield_curve,
+      move_index          = EXCLUDED.move_index,
+      mag7_share          = EXCLUDED.mag7_share,
+      calculated_at       = NOW()
   `;
 }
 
 export async function getLatestBsiSnapshot(): Promise<BsiSnapshotRow | null> {
   const result = await sql`
-    SELECT id, score, liquidity_score, concentration_score,
+    SELECT id, date, score, liquidity_score, concentration_score,
            yield_curve, move_index, mag7_share, calculated_at
     FROM bsi_snapshots
-    ORDER BY calculated_at DESC
+    ORDER BY date DESC
     LIMIT 1
   `;
   if (result.rowCount === 0) return null;
   return result.rows[0] as BsiSnapshotRow;
 }
 
-export async function getBsiHistory(limit: number = 90): Promise<BsiSnapshotRow[]> {
+export async function getBsiHistory(days: number = 90): Promise<BsiSnapshotRow[]> {
   const result = await sql`
-    SELECT id, score, liquidity_score, concentration_score,
-           yield_curve, move_index, mag7_share, calculated_at
+    SELECT DISTINCT ON (date)
+      id, date, score, liquidity_score, concentration_score,
+      yield_curve, move_index, mag7_share, calculated_at
     FROM bsi_snapshots
-    ORDER BY calculated_at DESC
-    LIMIT ${limit}
+    WHERE date >= CURRENT_DATE - ${days}
+    ORDER BY date ASC, calculated_at DESC
   `;
-  return result.rows.reverse() as BsiSnapshotRow[];
+  return result.rows as BsiSnapshotRow[];
 }
