@@ -49,25 +49,28 @@ export async function initializeBsiTables(): Promise<void> {
     )
   `;
   // 既存テーブルに date カラムがなければ追加するMigration
-  await sql`
-    ALTER TABLE bsi_snapshots ADD COLUMN IF NOT EXISTS date DATE
+  const colCheck = await sql`
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'bsi_snapshots' AND column_name = 'date'
   `;
-  await sql`
-    UPDATE bsi_snapshots SET date = calculated_at::date WHERE date IS NULL
-  `;
-  // 同日の重複を削除（最新1件のみ保持）してからUNIQUEインデックスを作成
-  await sql`
-    DELETE FROM bsi_snapshots
-    WHERE id NOT IN (
-      SELECT DISTINCT ON (date) id
-      FROM bsi_snapshots
-      ORDER BY date, calculated_at DESC
-    )
-  `;
-  await sql`
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_bsi_snapshots_date
-      ON bsi_snapshots(date)
-  `;
+  if (colCheck.rowCount === 0) {
+    await sql`ALTER TABLE bsi_snapshots ADD COLUMN date DATE`;
+    await sql`UPDATE bsi_snapshots SET date = calculated_at::date`;
+    // 同日の重複を削除（最新1件のみ保持）してからUNIQUEインデックスを作成
+    await sql`
+      DELETE FROM bsi_snapshots
+      WHERE id NOT IN (
+        SELECT DISTINCT ON (date) id
+        FROM bsi_snapshots
+        ORDER BY date, calculated_at DESC
+      )
+    `;
+    await sql`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_bsi_snapshots_date
+        ON bsi_snapshots(date)
+    `;
+    console.log('[BSI] bsi_snapshots: dateカラムのMigration完了');
+  }
   await sql`
     CREATE INDEX IF NOT EXISTS idx_bsi_snapshots_calculated_at
       ON bsi_snapshots(calculated_at DESC)
