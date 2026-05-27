@@ -206,7 +206,7 @@ export default function RiskMonitorPage() {
 
   if (loading || !assessment) {
     return (
-      <div className="min-h-screen bg-gray-900 text-white p-4 flex items-center justify-center">
+      <div className="bg-gray-900 text-white p-4 flex items-center justify-center" style={{ minHeight: "calc(100vh - 4rem)" }}>
         <div className="text-center">
           <h1 className="text-3xl font-bold mb-4">リスク監視</h1>
           <p>データを読み込み中...</p>
@@ -217,7 +217,7 @@ export default function RiskMonitorPage() {
   }
 
   return (
-    <div className="bg-gray-900 text-white" style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
+    <div className="bg-gray-900 text-white" style={{ height: "calc(100vh - 4rem)", display: "flex", flexDirection: "column" }}>
       {/* Compact Header */}
       <div className="bg-gray-800 border-b border-gray-700 p-3 flex-shrink-0">
         <div className="flex items-center justify-between">
