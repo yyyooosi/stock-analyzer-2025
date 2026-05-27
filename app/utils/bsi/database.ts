@@ -10,6 +10,7 @@ export interface BsiIndicatorRow {
 
 export interface BsiSnapshotRow {
   id: number;
+  date: string;
   score: number;
   liquidity_score: number;
   concentration_score: number;
@@ -37,6 +38,7 @@ export async function initializeBsiTables(): Promise<void> {
   await sql`
     CREATE TABLE IF NOT EXISTS bsi_snapshots (
       id                  SERIAL PRIMARY KEY,
+      date                DATE NOT NULL UNIQUE,
       score               NUMERIC(5, 2) NOT NULL,
       liquidity_score     NUMERIC(5, 2),
       concentration_score NUMERIC(5, 2),
@@ -46,9 +48,13 @@ export async function initializeBsiTables(): Promise<void> {
       calculated_at       TIMESTAMP NOT NULL DEFAULT NOW()
     )
   `;
+  // Migrate existing tables that were created without the date column
   await sql`
-    CREATE INDEX IF NOT EXISTS idx_bsi_snapshots_calculated_at
-      ON bsi_snapshots(calculated_at DESC)
+    ALTER TABLE bsi_snapshots ADD COLUMN IF NOT EXISTS date DATE UNIQUE
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS idx_bsi_snapshots_date
+      ON bsi_snapshots(date DESC)
   `;
 }
 
@@ -122,10 +128,10 @@ export async function saveBsiSnapshot(data: {
 
 export async function getLatestBsiSnapshot(): Promise<BsiSnapshotRow | null> {
   const result = await sql`
-    SELECT id, score, liquidity_score, concentration_score,
+    SELECT id, date, score, liquidity_score, concentration_score,
            yield_curve, move_index, mag7_share, calculated_at
     FROM bsi_snapshots
-    ORDER BY calculated_at DESC
+    ORDER BY date DESC
     LIMIT 1
   `;
   if (result.rowCount === 0) return null;
@@ -134,10 +140,10 @@ export async function getLatestBsiSnapshot(): Promise<BsiSnapshotRow | null> {
 
 export async function getBsiHistory(limit: number = 90): Promise<BsiSnapshotRow[]> {
   const result = await sql`
-    SELECT id, score, liquidity_score, concentration_score,
+    SELECT id, date, score, liquidity_score, concentration_score,
            yield_curve, move_index, mag7_share, calculated_at
     FROM bsi_snapshots
-    ORDER BY calculated_at DESC
+    ORDER BY date DESC
     LIMIT ${limit}
   `;
   return result.rows.reverse() as BsiSnapshotRow[];
