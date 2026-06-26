@@ -11,11 +11,12 @@ jobs:
     steps:
       - name: BSI スコアを計算
         run: |
-          # -L でリダイレクト(308など)を追従し、--post30x で POST メソッドとボディを維持する。
-          # これが無いと NEXT_PUBLIC_APP_URL の正規化リダイレクトで /api/bsi/calculate 本体に
-          # 到達せず「Redirecting...」を受け取って成功扱いになり、データが保存されない。
+          # -L でリダイレクト(308など)を追従し /api/bsi/calculate 本体まで到達させる。
+          # これが無いと VERCEL_APP_URL の正規化リダイレクトで「Redirecting...」を受け取って
+          # 成功扱いになり、データが保存されない。307/308 は curl がデフォルトで POST を維持し、
+          # 301/302/303 は --post30x で POST を維持する(--post308 というフラグは存在しない)。
           # --fail-with-body で 4xx/5xx を失敗にしつつ、レスポンス本文をログに残す。
-          curl --fail-with-body -L --post301 --post302 --post308 \
+          curl --fail-with-body -L --post301 --post302 --post303 \
             -X POST "${{ secrets.VERCEL_APP_URL }}/api/bsi/calculate" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             -H "Content-Type: application/json" \
