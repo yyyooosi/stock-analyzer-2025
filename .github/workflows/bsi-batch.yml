@@ -11,7 +11,12 @@ jobs:
     steps:
       - name: BSI スコアを計算
         run: |
-          curl -f -X POST "${{ secrets.VERCEL_APP_URL }}/api/bsi/calculate" \
+          # -L でリダイレクト(308など)を追従し、--post30x で POST メソッドとボディを維持する。
+          # これが無いと NEXT_PUBLIC_APP_URL の正規化リダイレクトで /api/bsi/calculate 本体に
+          # 到達せず「Redirecting...」を受け取って成功扱いになり、データが保存されない。
+          # --fail-with-body で 4xx/5xx を失敗にしつつ、レスポンス本文をログに残す。
+          curl --fail-with-body -L --post301 --post302 --post308 \
+            -X POST "${{ secrets.VERCEL_APP_URL }}/api/bsi/calculate" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             -H "Content-Type: application/json" \
-            --max-time 30
+            --max-time 60
