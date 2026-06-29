@@ -1,0 +1,50 @@
+name: Deploy to Google Apps Script
+
+# main への push で自動的に clasp push + deploy を実行する。
+# ※ このワークフローはリポジトリのルートにある .github/workflows/ から
+#    実行される必要があります。tokyoinn-checker/ を独立リポジトリの
+#    ルートに移した場合はそのまま動作します。サブディレクトリのまま
+#    使う場合は working-directory とパスを調整してください。
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "src/**"
+      - ".clasp.json"
+      - "package.json"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install clasp
+        run: npm install -g @google/clasp
+
+      - name: Write clasp credentials
+        run: echo '${{ secrets.CLASPRC_JSON }}' > ~/.clasprc.json
+
+      - name: Write .clasp.json
+        run: |
+          cat > .clasp.json <<'EOF'
+          {
+            "scriptId": "${{ secrets.SCRIPT_ID }}",
+            "rootDir": "src"
+          }
+          EOF
+
+      - name: Push to Apps Script
+        run: clasp push -f
+
+      - name: Deploy new version
+        run: clasp deploy --description "CI deploy ${{ github.sha }}"

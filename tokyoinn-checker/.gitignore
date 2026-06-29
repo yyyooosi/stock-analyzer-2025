@@ -1,0 +1,7 @@
+# clasp（ローカルの認証情報・スクリプトID紐付けはコミットしない）
+.clasp.json
+.clasprc.json
+
+# node
+node_modules/
+npm-debug.log*

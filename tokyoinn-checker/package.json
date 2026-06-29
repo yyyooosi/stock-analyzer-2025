@@ -1,0 +1,15 @@
+{
+  "name": "tokyoinn-vacancy-checker",
+  "version": "1.0.0",
+  "description": "東横イン空室チェッカー (Google Apps Script / clasp管理)",
+  "private": true,
+  "scripts": {
+    "login": "clasp login",
+    "pull": "clasp pull",
+    "push": "clasp push",
+    "deploy": "clasp push -f && clasp deploy"
+  },
+  "devDependencies": {
+    "@google/clasp": "^2.4.2"
+  }
+}
